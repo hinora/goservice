@@ -9,8 +9,17 @@ type BrokerConfig struct {
 	Trace       string
 }
 
-var broker BrokerConfig = BrokerConfig{
-	NodeId: "Test",
+type Broker struct {
+	Config   BrokerConfig
+	Services []Service
+	Started  func(*Context)
+	Stoped   func(*Context)
+}
+
+var broker Broker
+
+func Init() {
+
 }
 
 func Hold() {
