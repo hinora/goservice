@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 )
@@ -25,6 +26,8 @@ type DiscoveryConfig struct {
 	HeartbeatInterval        int
 	HeartbeatTimeout         int
 	CleanOfflineNodesTimeout int
+	Config                   interface{}
+	DiscoveryType            DiscoveryType
 }
 
 type DiscoveryPotocol int
@@ -81,13 +84,20 @@ const (
 	DiscoveryBroadcastsDisconnect DiscoveryBroadcastsChannelType = "DISCONNECT"
 )
 
-var registryService RegistryService
+var registryServices []RegistryService
 var registryNode RegistryNode
 
-func StartDiscovery(typeDiscovery DiscoveryType, config interface{}) {
-	switch typeDiscovery {
+func initDiscovery() {
+	registryNode = RegistryNode{
+		NodeId: broker.Config.NodeId,
+		IP:     []string{},
+	}
+}
+
+func startDiscovery() {
+	switch broker.Config.DiscoveryConfig.DiscoveryType {
 	case DiscoveryTypeRedis:
-		config := config.(DiscoveryRedisConfig)
+		config := broker.Config.DiscoveryConfig.Config.(DiscoveryRedisConfig)
 		rdb := redis.NewClient(&redis.Options{
 			Addr:     config.Host + ":" + strconv.Itoa(config.Port),
 			Password: config.Password,
@@ -96,6 +106,7 @@ func StartDiscovery(typeDiscovery DiscoveryType, config interface{}) {
 
 		// start listen
 		go listenDiscoveryRedis(rdb)
+		time.Sleep(time.Millisecond * 1000)
 		// broadcast info
 		broadcastRegistryInfo(rdb)
 		break
@@ -104,6 +115,7 @@ func StartDiscovery(typeDiscovery DiscoveryType, config interface{}) {
 }
 
 func listenDiscoveryRedis(rdb *redis.Client) {
+	logInfo("Discovery listener started")
 	var ctx = context.Background()
 	channel := GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsInfo)
 	pubsub := rdb.Subscribe(ctx, channel)
@@ -119,6 +131,7 @@ func listenDiscoveryRedis(rdb *redis.Client) {
 }
 
 func broadcastRegistryInfo(rdb *redis.Client) {
+	logInfo("Discovery emit info service")
 	var ctx = context.Background()
 	channel := GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsInfo)
 
@@ -126,14 +139,7 @@ func broadcastRegistryInfo(rdb *redis.Client) {
 		Sender: RegistryNode{
 			NodeId: "Test",
 		},
-		Services: []RegistryService{
-			{
-				Node: RegistryNode{
-					NodeId: "Test",
-				},
-				Name: "service_1",
-			},
-		},
+		Services: registryServices,
 	})
 	err := rdb.Publish(ctx, channel, info).Err()
 	if err != nil {

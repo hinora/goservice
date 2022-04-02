@@ -6,11 +6,11 @@ type RegistryNode struct {
 }
 type RegistryAction struct {
 	Name   string
-	Params map[string]interface{}
+	Params interface{}
 }
 type RegistryEvent struct {
 	Name   string
-	Params map[string]interface{}
+	Params interface{}
 }
 type RegistryService struct {
 	Node    RegistryNode
