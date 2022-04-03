@@ -37,7 +37,7 @@ type Transporter struct {
 	Config    TransporterConfig
 	Subscribe func(channel string) *redis.PubSub
 	Emit      func(channel string, data interface{}) error
-	Receive   func(*redis.PubSub, func(string, interface{}, error))
+	Receive   func(func(string, interface{}, error), interface{})
 }
 
 var transporter Transporter
@@ -73,9 +73,10 @@ func initTransporter() {
 
 			return nil
 		}
-		transporter.Receive = func(pubsub *redis.PubSub, callBack func(string, interface{}, error)) {
+		transporter.Receive = func(callBack func(string, interface{}, error), pubsub interface{}) {
+			ps := pubsub.(*redis.PubSub)
 			for {
-				msg, err := pubsub.ReceiveMessage(ctx)
+				msg, err := ps.ReceiveMessage(ctx)
 				if err != nil {
 					panic(err)
 				}
@@ -91,9 +92,13 @@ func initTransporter() {
 	}
 }
 
-func listenActionCall(serviceName string, action *Action) {
+func listenActionCall(serviceName string, action Action) {
+	channel := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + serviceName + "." + action.Name
+	switch transporter.Config.TransporterType {
+	case TransporterTypeRedis:
+		break
+	}
 	// var ctx = context.Background()
-	// channel := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + serviceName + "."
 	// pubsub := rdb.Subscribe(ctx, channel)
 	// defer pubsub.Close()
 	// for {
