@@ -14,6 +14,7 @@ type BrokerConfig struct {
 	Matrics           string
 	Trace             string
 	DiscoveryConfig   DiscoveryConfig
+	RequestTimeOut    int
 }
 
 type Broker struct {
@@ -45,6 +46,7 @@ func Init() {
 					Host: "127.0.0.1",
 				},
 			},
+			RequestTimeOut: 30000,
 		},
 	}
 	initDiscovery()
@@ -85,20 +87,24 @@ func LoadService(service Service) {
 	// service lifecycle
 	// started
 	context := Context{
-		RequestId:   "",
-		Params:      map[string]interface{}{},
-		Meta:        map[string]interface{}{},
-		FromService: "",
-		FromNode:    "",
-		Call: func(action string, params interface{}, meta interface{}) (interface{}, error) {
-			return map[string]interface{}{}, nil
-		},
+		RequestId:    "",
+		Params:       map[string]interface{}{},
+		Meta:         map[string]interface{}{},
+		FromService:  "",
+		FromNode:     "",
+		CallingLevel: 1,
 	}
+	context.Call = func(action string, params interface{}, meta interface{}) (interface{}, error) {
+		return callAction(context, action, params, meta)
+	}
+
 	service.Started(&context)
+	// actions handle
+	for _, a := range service.Actions {
+		listenActionCall(service.Name, a)
+	}
 
-	// action handle
-
-	// event handle
+	// events handle
 }
 
 func Hold() {

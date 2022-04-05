@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/hinora/goservice"
 )
@@ -10,9 +11,6 @@ func main() {
 	goservice.Init()
 	goservice.LoadService(goservice.Service{
 		Name: "math",
-		Started: func(ctx *goservice.Context) {
-			fmt.Println("service test started")
-		},
 		Actions: []goservice.Action{
 			{
 				Name:   "plus",
@@ -22,6 +20,12 @@ func main() {
 					return nil, nil
 				},
 			},
+		},
+		Started: func(ctx *goservice.Context) {
+			time.Sleep(time.Millisecond * 5000)
+			fmt.Println("service test started")
+			data, err := ctx.Call("math.plus", nil, nil)
+			fmt.Println("Response: ", data, err)
 		},
 	})
 	goservice.Hold()

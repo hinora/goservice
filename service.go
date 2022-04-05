@@ -2,14 +2,15 @@ package goservice
 
 type Call func(action string, params interface{}, meta interface{}) (interface{}, error)
 type Context struct {
-	RequestId   string
-	ResponseId  string
-	Params      interface{}
-	Meta        interface{}
-	FromService string
-	FromAction  string
-	FromNode    string
-	Call        Call
+	RequestId    string
+	ResponseId   string
+	Params       interface{}
+	Meta         interface{}
+	FromService  string
+	FromAction   string
+	FromNode     string
+	CallingLevel int
+	Call         Call
 }
 type Action struct {
 	Name   string
