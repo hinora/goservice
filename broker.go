@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/bep/debounce"
+	"github.com/google/uuid"
 )
 
 // BROKER
@@ -46,7 +47,7 @@ func Init() {
 					Host: "127.0.0.1",
 				},
 			},
-			RequestTimeOut: 30000,
+			RequestTimeOut: 5000,
 		},
 	}
 	initDiscovery()
@@ -87,21 +88,21 @@ func LoadService(service Service) {
 	// service lifecycle
 	// started
 	context := Context{
-		RequestId:    "",
+		RequestId:    uuid.New().String(),
 		Params:       map[string]interface{}{},
 		Meta:         map[string]interface{}{},
 		FromService:  "",
-		FromNode:     "",
+		FromNode:     broker.Config.NodeId,
 		CallingLevel: 1,
 	}
 	context.Call = func(action string, params interface{}, meta interface{}) (interface{}, error) {
 		return callAction(context, action, params, meta)
 	}
+	go service.Started(&context)
 
-	service.Started(&context)
 	// actions handle
 	for _, a := range service.Actions {
-		listenActionCall(service.Name, a)
+		go listenActionCall(service.Name, a)
 	}
 
 	// events handle

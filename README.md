@@ -1,2 +1,2 @@
 # Go Service Framework
-Go serivce is a microservice framework in golang
+Go service is a microservice framework in golang

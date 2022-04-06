@@ -9,6 +9,7 @@ import (
 	"github.com/asaskevich/EventBus"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	"github.com/mitchellh/mapstructure"
 )
 
 type PackageType int
@@ -62,7 +63,7 @@ type Transporter struct {
 	Config    TransporterConfig
 	Subscribe func(channel string) interface{}
 	Emit      func(channel string, data interface{}) error
-	Receive   func(func(string, RequestTranferData, error), interface{})
+	Receive   func(func(string, interface{}, error), interface{})
 }
 
 var transporter Transporter
@@ -106,7 +107,7 @@ func initRedisTransporter() {
 
 		return nil
 	}
-	transporter.Receive = func(callBack func(string, RequestTranferData, error), pubsub interface{}) {
+	transporter.Receive = func(callBack func(string, interface{}, error), pubsub interface{}) {
 		ps := pubsub.(*redis.PubSub)
 		for {
 			msg, err := ps.ReceiveMessage(ctx)
@@ -118,7 +119,8 @@ func initRedisTransporter() {
 			if err != nil {
 				callBack("", RequestTranferData{}, err)
 			}
-			callBack(msg.Channel, data.(RequestTranferData), nil)
+
+			callBack(msg.Channel, data, nil)
 		}
 	}
 
@@ -174,10 +176,12 @@ func listenActionCall(serviceName string, action Action) {
 
 func redisListenActionCall(serviceName string, actionName string) {
 	channelTransporter := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".request"
+	logInfo(channelTransporter)
 	channelInternal := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + serviceName + "." + actionName
 	pb := transporter.Subscribe(channelTransporter)
 	pubsub := pb.(*redis.PubSub)
-	transporter.Receive(func(cn string, data RequestTranferData, err error) {
+
+	transporter.Receive(func(cn string, data interface{}, err error) {
 		bus.Publish(channelInternal, data)
 	}, pubsub)
 }
@@ -214,12 +218,14 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 				CallerNodeId:  broker.Config.NodeId,
 				CallerService: service.Name,
 				CallerAction:  action.Name,
-				CallingLevel:  ctx.CallingLevel + 1,
+				CallingLevel:  ctx.CallingLevel,
 				CalledTime:    time.Now().UnixNano(),
 			}
 			// Subscribe response data
-			bus.SubscribeOnce(channelInternal, func(d ResponseTranferData) {
-				data <- d
+			bus.SubscribeOnce(channelInternal, func(d interface{}) {
+				dT := ResponseTranferData{}
+				mapstructure.Decode(d, &dT)
+				data <- dT
 			})
 
 			// push transporter

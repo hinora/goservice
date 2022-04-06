@@ -8,6 +8,20 @@ import (
 )
 
 func main() {
+	// ser, _ := goservice.SerializerJson(goservice.RequestTranferData{
+	// 	Params:        nil,
+	// 	Meta:          nil,
+	// 	RequestId:     "asd",
+	// 	ResponseId:    "dsa",
+	// 	CallerNodeId:  "Dfds",
+	// 	CallerService: "service",
+	// 	CallerAction:  "action",
+	// 	CallingLevel:  1,
+	// 	CalledTime:    time.Now().UnixNano(),
+	// })
+	// de, _ := goservice.DeSerializerJson(ser)
+	// fmt.Println(ser)
+	// fmt.Println(de)
 	goservice.Init()
 	goservice.LoadService(goservice.Service{
 		Name: "math",
@@ -17,7 +31,7 @@ func main() {
 				Params: map[string]interface{}{},
 				Handle: func(context *goservice.Context) (interface{}, error) {
 					fmt.Println("Handle action plus")
-					return nil, nil
+					return "test", nil
 				},
 			},
 		},
