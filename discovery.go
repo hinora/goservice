@@ -2,11 +2,11 @@ package goservice
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/mitchellh/mapstructure"
 )
 
 // DISCOVERY & REGISTRY
@@ -126,7 +126,35 @@ func listenDiscoveryRedis(rdb *redis.Client) {
 			panic(err)
 		}
 
-		fmt.Println(msg.Channel, msg.Payload)
+		deJ, e := DeSerializerJson(msg.Payload)
+		if e != nil {
+			var services []RegistryService
+			mapstructure.Decode(deJ, &services)
+
+			for _, service := range services {
+				var registryActions []RegistryAction
+				for _, a := range service.Actions {
+					registryActions = append(registryActions, RegistryAction{
+						Name:   a.Name,
+						Params: a.Params,
+					})
+				}
+				var registryEvents []RegistryEvent
+				for _, e := range service.Events {
+					registryEvents = append(registryEvents, RegistryEvent{
+						Name:   e.Name,
+						Params: e.Params,
+					})
+				}
+
+				registryServices = append(registryServices, RegistryService{
+					Node:    service.Node,
+					Name:    service.Name,
+					Actions: registryActions,
+					Events:  registryEvents,
+				})
+			}
+		}
 	}
 }
 

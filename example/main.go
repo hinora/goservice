@@ -8,20 +8,6 @@ import (
 )
 
 func main() {
-	// ser, _ := goservice.SerializerJson(goservice.RequestTranferData{
-	// 	Params:        nil,
-	// 	Meta:          nil,
-	// 	RequestId:     "asd",
-	// 	ResponseId:    "dsa",
-	// 	CallerNodeId:  "Dfds",
-	// 	CallerService: "service",
-	// 	CallerAction:  "action",
-	// 	CallingLevel:  1,
-	// 	CalledTime:    time.Now().UnixNano(),
-	// })
-	// de, _ := goservice.DeSerializerJson(ser)
-	// fmt.Println(ser)
-	// fmt.Println(de)
 	goservice.Init()
 	goservice.LoadService(goservice.Service{
 		Name: "math",
@@ -31,15 +17,30 @@ func main() {
 				Params: map[string]interface{}{},
 				Handle: func(context *goservice.Context) (interface{}, error) {
 					fmt.Println("Handle action plus")
-					return "test", nil
+					return "This is reusle from action math.plus", nil
 				},
 			},
 		},
 		Started: func(ctx *goservice.Context) {
 			time.Sleep(time.Millisecond * 5000)
 			fmt.Println("service test started")
-			data, err := ctx.Call("math.plus", nil, nil)
-			fmt.Println("Response: ", data, err)
+
+			data, err := ctx.Call("hello.say_hi", nil, nil)
+			fmt.Println("Response from say hi: ", data, err)
+		},
+	})
+	goservice.LoadService(goservice.Service{
+		Name: "hello",
+		Actions: []goservice.Action{
+			{
+				Name:   "say_hi",
+				Params: map[string]interface{}{},
+				Handle: func(ctx *goservice.Context) (interface{}, error) {
+					data, err := ctx.Call("math.plus", nil, nil)
+					fmt.Println("Response from math.plus: ", data, err)
+					return "This is result from actionsay hi", nil
+				},
+			},
 		},
 	})
 	goservice.Hold()

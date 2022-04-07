@@ -56,6 +56,9 @@ func Init() {
 }
 
 func LoadService(service Service) {
+	// data, err := emitWithTimeout("test", "test", "data")
+	// fmt.Println("ddd: ", data, err)
+	// return
 	// add service to list
 	broker.Services = append(broker.Services, &service)
 
@@ -96,9 +99,15 @@ func LoadService(service Service) {
 		CallingLevel: 1,
 	}
 	context.Call = func(action string, params interface{}, meta interface{}) (interface{}, error) {
-		return callAction(context, action, params, meta)
+		callResult, err := callAction(context, action, params, meta, "", "")
+		if err != nil {
+			return nil, err
+		}
+		return callResult.Data, err
 	}
-	go service.Started(&context)
+	if service.Started != nil {
+		go service.Started(&context)
+	}
 
 	// actions handle
 	for _, a := range service.Actions {
