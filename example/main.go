@@ -17,7 +17,7 @@ func main() {
 				Params: map[string]interface{}{},
 				Handle: func(context *goservice.Context) (interface{}, error) {
 					fmt.Println("Handle action plus")
-					return "This is reusle from action math.plus", nil
+					return "This is result from action math.plus", nil
 				},
 			},
 		},
@@ -36,9 +36,10 @@ func main() {
 				Name:   "say_hi",
 				Params: map[string]interface{}{},
 				Handle: func(ctx *goservice.Context) (interface{}, error) {
+					fmt.Println("Handle action say hi")
 					data, err := ctx.Call("math.plus", nil, nil)
 					fmt.Println("Response from math.plus: ", data, err)
-					return "This is result from actionsay hi", nil
+					return "This is result from action say hi", nil
 				},
 			},
 		},

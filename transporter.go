@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"sync"
 	"time"
 
-	"github.com/asaskevich/EventBus"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
@@ -71,13 +69,10 @@ type Transporter struct {
 }
 
 var transporter Transporter
-var (
-	busList      map[string]EventBus.Bus
-	busListMutex = sync.RWMutex{}
-)
+var bus EventBus
 
 func initTransporter() {
-	busList = make(map[string]EventBus.Bus)
+	bus = EventBus{}
 	transporter = Transporter{
 		Config: broker.Config.TransporterConfig,
 	}
@@ -136,26 +131,30 @@ func initRedisTransporter() {
 	pbRq := transporter.Subscribe(channelRequestTransporter)
 	pubsubRq := pbRq.(*redis.PubSub)
 	go transporter.Receive(func(cn string, data interface{}, err error) {
-		if err != nil {
-			return
-		}
-		dT := RequestTranferData{}
-		mapstructure.Decode(data, &dT)
-		responseId := dT.ResponseId
+		go func() {
+			if err != nil {
+				return
+			}
+			dT := RequestTranferData{}
+			mapstructure.Decode(data, &dT)
+			responseId := dT.ResponseId
 
-		dT.ResponseId = uuid.New().String()
-		// Subscribe response data
-		res, e := emitWithTimeout(dT.ResponseId, dT.CallToService, dT.CallToAction, dT)
-		if e != nil {
-			return
-		}
+			dT.ResponseId = uuid.New().String()
+			// Subscribe response data
+			channelCall := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + dT.CallToService + "." + dT.CallToAction
+			channelReceive := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + dT.ResponseId
+			res, e := emitWithTimeout(channelCall, channelReceive, dT)
+			if e != nil {
+				return
+			}
 
-		channelResponseTransporter := GO_SERVICE_PREFIX + "." + dT.CallerNodeId + ".response"
-		resT := ResponseTranferData{}
-		mapstructure.Decode(res, &resT)
+			channelResponseTransporter := GO_SERVICE_PREFIX + "." + dT.CallerNodeId + ".response"
+			resT := ResponseTranferData{}
+			mapstructure.Decode(res, &resT)
 
-		resT.ResponseId = responseId
-		transporter.Emit(channelResponseTransporter, resT)
+			resT.ResponseId = responseId
+			transporter.Emit(channelResponseTransporter, resT)
+		}()
 	}, pubsubRq)
 
 	// subceibe channel response
@@ -163,26 +162,22 @@ func initRedisTransporter() {
 	pbRs := transporter.Subscribe(channelResponseTransporter)
 	pubsubRs := pbRs.(*redis.PubSub)
 	go transporter.Receive(func(cn string, data interface{}, err error) {
-		if err != nil {
-			return
-		}
-		dRs := ResponseTranferData{}
-		mapstructure.Decode(data, &dRs)
-		channelResponseTransporter := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + dRs.ResponseId
-		if _, ok := busList[dRs.ResponseId]; ok {
-			//do something here
-			busList[dRs.ResponseId].Publish(channelResponseTransporter, dRs)
-		}
+		go func() {
+			if err != nil {
+				return
+			}
+			dRs := ResponseTranferData{}
+			mapstructure.Decode(data, &dRs)
+			channelResponseTransporter := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + dRs.ResponseId
+			bus.Publish(channelResponseTransporter, dRs)
+		}()
 	}, pubsubRs)
 
 }
 
 func listenActionCall(serviceName string, action Action) {
 	channel := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + serviceName + "." + action.Name
-	busListMutex.Lock()
-	busList[serviceName+"."+action.Name] = EventBus.New()
-	busListMutex.Unlock()
-	busList[serviceName+"."+action.Name].Subscribe(channel, func(data RequestTranferData) {
+	bus.Subscribe(channel, func(data RequestTranferData) {
 		go func() {
 			responseId := data.ResponseId
 			ctx := Context{
@@ -225,9 +220,7 @@ func listenActionCall(serviceName string, action Action) {
 			}
 
 			responseChanel := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + responseId
-			if _, ok := busList[responseId]; ok {
-				busList[responseId].Publish(responseChanel, responseTranferData)
-			}
+			bus.Publish(responseChanel, responseTranferData)
 		}()
 	})
 }
@@ -270,15 +263,12 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 				CallToAction:  action.Name,
 			}
 			// Subscribe response data
-			busListMutex.Lock()
-			busList[responseId] = EventBus.New()
-			busListMutex.Unlock()
-			busList[responseId].SubscribeOnce(channelInternal, func(d interface{}) {
+			bus.Subscribe(channelInternal, func(d interface{}) {
 				go func() {
 					dT := ResponseTranferData{}
 					mapstructure.Decode(d, &dT)
 					data <- dT
-					delete(busList, responseId)
+					bus.UnSubscribe(channelInternal)
 				}()
 			})
 
@@ -298,22 +288,17 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 	}
 }
 
-func emitWithTimeout(responseId string, callToService string, CallToAction string, dataSend interface{}) (interface{}, error) {
+func emitWithTimeout(channelCall string, channelReceive string, dataSend interface{}) (interface{}, error) {
 	data := make(chan interface{}, 1)
 	go func() {
-		channelCall := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + callToService + "." + CallToAction
-		channelReceive := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + responseId
+
 		// Subscribe response data
-		busListMutex.Lock()
-		busList[responseId] = EventBus.New()
-		busListMutex.Unlock()
-		busList[responseId].SubscribeOnce(channelReceive, func(d interface{}) {
+		bus.Subscribe(channelReceive, func(d interface{}) {
 			data <- d
+			bus.UnSubscribe(channelReceive)
 		})
 
-		if _, ok := busList[callToService+"."+CallToAction]; ok {
-			busList[callToService+"."+CallToAction].Publish(channelCall, dataSend)
-		}
+		bus.Publish(channelCall, dataSend)
 	}()
 	select {
 	case res := <-data:

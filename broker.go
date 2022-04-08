@@ -56,10 +56,7 @@ func Init() {
 }
 
 func LoadService(service Service) {
-	// data, err := emitWithTimeout("test", "test", "data")
-	// fmt.Println("ddd: ", data, err)
-	// return
-	// add service to list
+
 	broker.Services = append(broker.Services, &service)
 
 	// add service to registry
