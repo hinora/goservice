@@ -229,6 +229,7 @@ func listenActionCall(serviceName string, action Action) {
 func callAction(ctx Context, actionName string, params interface{}, meta interface{}, callerService string, callerAction string) (ResponseTranferData, error) {
 	data := make(chan ResponseTranferData, 1)
 	var err error
+	channelInternal := ""
 	go func() {
 		// loop
 		var action RegistryAction
@@ -248,7 +249,7 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 			// Init data send
 			channelTransporter := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".request"
 			responseId := uuid.New().String()
-			channelInternal := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + responseId
+			channelInternal = GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + responseId
 			dataSend := RequestTranferData{
 				Params:        params,
 				Meta:          meta,
@@ -274,6 +275,11 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 
 			// push transporter
 			transporter.Emit(channelTransporter, dataSend)
+
+			// Service in local? Use internal event bus
+			// channelCall := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + dT.CallToService + "." + dT.CallToAction
+			// channelReceive := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + dT.ResponseId
+			// res, e := emitWithTimeout(channelCall, channelReceive, dT)
 		}
 	}()
 
@@ -284,6 +290,9 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 		}
 		return res, nil
 	case <-time.After(time.Duration(broker.Config.RequestTimeOut) * time.Millisecond):
+		if channelInternal != "" {
+			bus.UnSubscribe(channelInternal)
+		}
 		return ResponseTranferData{}, errors.New("Timeout")
 	}
 }
@@ -304,6 +313,7 @@ func emitWithTimeout(channelCall string, channelReceive string, dataSend interfa
 	case res := <-data:
 		return res, nil
 	case <-time.After(time.Duration(broker.Config.RequestTimeOut) * time.Millisecond):
+		bus.UnSubscribe(channelReceive)
 		return nil, errors.New("Timeout")
 	}
 }
