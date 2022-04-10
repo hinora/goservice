@@ -247,7 +247,7 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 			data = nil
 		} else {
 			// Init data send
-			channelTransporter := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".request"
+			channelTransporter := GO_SERVICE_PREFIX + "." + service.Node.NodeId + ".request"
 			responseId := uuid.New().String()
 			channelInternal = GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + responseId
 			dataSend := RequestTranferData{
