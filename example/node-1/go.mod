@@ -2,7 +2,7 @@ module example
 
 go 1.18
 
-replace github.com/hinora/goservice => ../
+replace github.com/hinora/goservice => ../../
 
 require github.com/hinora/goservice v1.0.0
 

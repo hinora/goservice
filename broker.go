@@ -29,26 +29,9 @@ var broker Broker
 
 var debouncedEmitInfo func(f func())
 
-func Init() {
+func Init(config BrokerConfig) {
 	broker = Broker{
-		Config: BrokerConfig{
-			NodeId: "Node-1",
-			DiscoveryConfig: DiscoveryConfig{
-				DiscoveryType: DiscoveryTypeRedis,
-				Config: DiscoveryRedisConfig{
-					Port: 6379,
-					Host: "127.0.0.1",
-				},
-			},
-			TransporterConfig: TransporterConfig{
-				TransporterType: TransporterTypeRedis,
-				Config: TransporterRedisConfig{
-					Port: 6379,
-					Host: "127.0.0.1",
-				},
-			},
-			RequestTimeOut: 5000,
-		},
+		Config: config,
 	}
 	initDiscovery()
 	initTransporter()

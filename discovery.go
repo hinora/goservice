@@ -2,6 +2,8 @@ package goservice
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"strconv"
 	"time"
 
@@ -42,35 +44,35 @@ const (
 )
 
 type TopicDiscoveryData struct {
-	Sender RegistryNode
+	Sender RegistryNode `json:"sender" mapstructure:"sender"`
 }
 
 type TopicInfoData struct {
-	Sender   RegistryNode
-	Services []RegistryService
+	Sender   RegistryNode      `json:"sender" mapstructure:"sender"`
+	Services []RegistryService `json:"services" mapstructure:"services"`
 }
 
 type TopicHeartbeatData struct {
-	Sender RegistryNode
-	Cpu    float64
-	Ram    int
+	Sender RegistryNode `json:"sender" mapstructure:"sender"`
+	Cpu    float64      `json:"cpu" mapstructure:"cpu"`
+	Ram    int          `json:"ram" mapstructure:"ram"`
 }
 
 type TopicPingData struct {
-	Sender RegistryNode
-	Time   uint64
+	Sender RegistryNode `json:"sender" mapstructure:"sender"`
+	Time   uint64       `json:"time" mapstructure:"time"`
 }
 
 type TopicPongData struct {
-	Sender  RegistryNode
-	Time    uint64
-	Arrived uint64
+	Sender  RegistryNode `json:"sender" mapstructure:"sender"`
+	Time    uint64       `json:"time" mapstructure:"time"`
+	Arrived uint64       `json:"arrived" mapstructure:"arrived"`
 }
 
 type TopicDisconnectData struct {
-	Sender  RegistryNode
-	Time    uint64
-	Arrived uint64
+	Sender  RegistryNode `json:"sender" mapstructure:"sender"`
+	Time    uint64       `json:"time" mapstructure:"time"`
+	Arrived uint64       `json:"arrived" mapstructure:"arrived"`
 }
 
 type DiscoveryBroadcastsChannelType string
@@ -92,6 +94,7 @@ func initDiscovery() {
 		NodeId: broker.Config.NodeId,
 		IP:     []string{},
 	}
+	fmt.Println(getOutboundIP())
 }
 
 func startDiscovery() {
@@ -125,11 +128,11 @@ func listenDiscoveryRedis(rdb *redis.Client) {
 		if err != nil {
 			panic(err)
 		}
-
 		deJ, e := DeSerializerJson(msg.Payload)
-		if e != nil {
-			var services []RegistryService
-			mapstructure.Decode(deJ, &services)
+		if e == nil {
+			var topicInfoData = TopicInfoData{}
+			mapstructure.Decode(deJ, &topicInfoData)
+			services := topicInfoData.Services
 
 			for _, service := range services {
 				var registryActions []RegistryAction
@@ -165,7 +168,7 @@ func broadcastRegistryInfo(rdb *redis.Client) {
 
 	info, _ := SerializerJson(TopicInfoData{
 		Sender: RegistryNode{
-			NodeId: "Test",
+			NodeId: broker.Config.NodeId,
 		},
 		Services: registryServices,
 	})
@@ -173,4 +176,17 @@ func broadcastRegistryInfo(rdb *redis.Client) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// Get preferred outbound ip of this machine
+func getOutboundIP() (net.IP, error) {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	return localAddr.IP, nil
 }

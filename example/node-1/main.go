@@ -8,7 +8,24 @@ import (
 )
 
 func main() {
-	goservice.Init()
+	goservice.Init(goservice.BrokerConfig{
+		NodeId: "Node-1",
+		DiscoveryConfig: goservice.DiscoveryConfig{
+			DiscoveryType: goservice.DiscoveryTypeRedis,
+			Config: goservice.DiscoveryRedisConfig{
+				Port: 6379,
+				Host: "127.0.0.1",
+			},
+		},
+		TransporterConfig: goservice.TransporterConfig{
+			TransporterType: goservice.TransporterTypeRedis,
+			Config: goservice.TransporterRedisConfig{
+				Port: 6379,
+				Host: "127.0.0.1",
+			},
+		},
+		RequestTimeOut: 5000,
+	})
 	goservice.LoadService(goservice.Service{
 		Name: "math",
 		Actions: []goservice.Action{
@@ -27,21 +44,6 @@ func main() {
 
 			data, err := ctx.Call("hello.say_hi", nil, nil)
 			fmt.Println("Response from say hi: ", data, err)
-		},
-	})
-	goservice.LoadService(goservice.Service{
-		Name: "hello",
-		Actions: []goservice.Action{
-			{
-				Name:   "say_hi",
-				Params: map[string]interface{}{},
-				Handle: func(ctx *goservice.Context) (interface{}, error) {
-					fmt.Println("Handle action say hi")
-					data, err := ctx.Call("math.plus", nil, nil)
-					fmt.Println("Response from math.plus: ", data, err)
-					return "This is result from action say hi", nil
-				},
-			},
 		},
 	})
 	goservice.Hold()

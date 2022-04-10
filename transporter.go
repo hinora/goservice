@@ -230,57 +230,55 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 	data := make(chan ResponseTranferData, 1)
 	var err error
 	channelInternal := ""
+	// loop
+	var action RegistryAction
+	var service RegistryService
+	for _, s := range registryServices {
+		for _, a := range s.Actions {
+			if actionName == s.Name+"."+a.Name {
+				action = a
+				service = s
+			}
+		}
+	}
+	if action.Name == "" && service.Name == "" {
+		return ResponseTranferData{}, errors.New("Action or event `" + actionName + "` is not existed")
+	}
 	go func() {
-		// loop
-		var action RegistryAction
-		var service RegistryService
-		for _, s := range registryServices {
-			for _, a := range s.Actions {
-				if actionName == s.Name+"."+a.Name {
-					action = a
-					service = s
-				}
-			}
+		// Init data send
+		channelTransporter := GO_SERVICE_PREFIX + "." + service.Node.NodeId + ".request"
+		responseId := uuid.New().String()
+		channelInternal = GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + responseId
+		dataSend := RequestTranferData{
+			Params:        params,
+			Meta:          meta,
+			RequestId:     ctx.RequestId,
+			ResponseId:    responseId,
+			CallerNodeId:  broker.Config.NodeId,
+			CallerService: callerService,
+			CallerAction:  callerAction,
+			CallingLevel:  ctx.CallingLevel,
+			CalledTime:    time.Now().UnixNano(),
+			CallToService: service.Name,
+			CallToAction:  action.Name,
 		}
-		if action.Name == "" && service.Name == "" {
-			err = errors.New("Action or event `" + action.Name + "` is not existed")
-			data = nil
-		} else {
-			// Init data send
-			channelTransporter := GO_SERVICE_PREFIX + "." + service.Node.NodeId + ".request"
-			responseId := uuid.New().String()
-			channelInternal = GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + responseId
-			dataSend := RequestTranferData{
-				Params:        params,
-				Meta:          meta,
-				RequestId:     ctx.RequestId,
-				ResponseId:    responseId,
-				CallerNodeId:  broker.Config.NodeId,
-				CallerService: callerService,
-				CallerAction:  callerAction,
-				CallingLevel:  ctx.CallingLevel,
-				CalledTime:    time.Now().UnixNano(),
-				CallToService: service.Name,
-				CallToAction:  action.Name,
-			}
-			// Subscribe response data
-			bus.Subscribe(channelInternal, func(d interface{}) {
-				go func() {
-					dT := ResponseTranferData{}
-					mapstructure.Decode(d, &dT)
-					data <- dT
-					bus.UnSubscribe(channelInternal)
-				}()
-			})
+		// Subscribe response data
+		bus.Subscribe(channelInternal, func(d interface{}) {
+			go func() {
+				dT := ResponseTranferData{}
+				mapstructure.Decode(d, &dT)
+				data <- dT
+				bus.UnSubscribe(channelInternal)
+			}()
+		})
 
-			// push transporter
-			transporter.Emit(channelTransporter, dataSend)
+		// push transporter
+		transporter.Emit(channelTransporter, dataSend)
 
-			// Service in local? Use internal event bus
-			// channelCall := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + dT.CallToService + "." + dT.CallToAction
-			// channelReceive := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + dT.ResponseId
-			// res, e := emitWithTimeout(channelCall, channelReceive, dT)
-		}
+		// Service in local? Use internal event bus
+		// channelCall := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + dT.CallToService + "." + dT.CallToAction
+		// channelReceive := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + dT.ResponseId
+		// res, e := emitWithTimeout(channelCall, channelReceive, dT)
 	}()
 
 	select {
