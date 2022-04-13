@@ -2,7 +2,6 @@ package goservice
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"strconv"
 	"time"
@@ -87,14 +86,19 @@ const (
 )
 
 var registryServices []RegistryService
-var registryNode RegistryNode
+var registryNode []RegistryNode
 
 func initDiscovery() {
-	registryNode = RegistryNode{
-		NodeId: broker.Config.NodeId,
-		IP:     []string{},
+	ip, err := getOutboundIP()
+	if err != nil {
+		panic(err)
 	}
-	fmt.Println(getOutboundIP())
+	registryNode = []RegistryNode{
+		{
+			NodeId: broker.Config.NodeId,
+			IP:     []string{ip.String()},
+		},
+	}
 }
 
 func startDiscovery() {
