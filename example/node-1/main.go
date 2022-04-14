@@ -16,6 +16,9 @@ func main() {
 				Port: 6379,
 				Host: "127.0.0.1",
 			},
+			HeartbeatInterval:        3000,
+			HeartbeatTimeout:         7000,
+			CleanOfflineNodesTimeout: 9000,
 		},
 		TransporterConfig: goservice.TransporterConfig{
 			TransporterType: goservice.TransporterTypeRedis,

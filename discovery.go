@@ -85,20 +85,32 @@ const (
 	DiscoveryBroadcastsDisconnect DiscoveryBroadcastsChannelType = "DISCONNECT"
 )
 
+const (
+	channelGlobalDiscovery  = GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcasts)
+	channelGlobalInfo       = GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsInfo)
+	channelGlobalHeartBeat  = GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsHeartbeat)
+	channelGlobalDisconnect = GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsDisconnect)
+)
+
+var (
+	channelPrivateInfo string
+)
 var registryServices []RegistryService
-var registryNode []RegistryNode
+var registryNodes []RegistryNode
+var registryNode RegistryNode
 
 func initDiscovery() {
+	channelPrivateInfo = GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsInfo) + "." + broker.Config.NodeId
+
 	ip, err := getOutboundIP()
 	if err != nil {
 		panic(err)
 	}
-	registryNode = []RegistryNode{
-		{
-			NodeId: broker.Config.NodeId,
-			IP:     []string{ip.String()},
-		},
+	registryNode = RegistryNode{
+		NodeId: broker.Config.NodeId,
+		IP:     []string{ip.String()},
 	}
+	registryNodes = []RegistryNode{}
 }
 
 func startDiscovery() {
@@ -113,73 +125,311 @@ func startDiscovery() {
 
 		// start listen
 		go listenDiscoveryRedis(rdb)
-		time.Sleep(time.Millisecond * 1000)
+		go listenDiscoveryGlobalRedis(rdb)
 		// broadcast info
-		broadcastRegistryInfo(rdb)
+		broadcastGlobal(rdb)
+
+		// clear node timeout
+		clearNodeTimeout()
 		break
 	}
 
 }
 
-func listenDiscoveryRedis(rdb *redis.Client) {
-	logInfo("Discovery listener started")
+func listenDiscoveryGlobalRedis(rdb *redis.Client) {
 	var ctx = context.Background()
-	channel := GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsInfo)
-	pubsub := rdb.Subscribe(ctx, channel)
-	defer pubsub.Close()
-	for {
-		msg, err := pubsub.ReceiveMessage(ctx)
+	// listen discovery
+	go func() {
+		pubsub := rdb.Subscribe(ctx, channelGlobalDiscovery)
+		defer pubsub.Close()
+		for {
+			msg, err := pubsub.ReceiveMessage(ctx)
+			if err != nil {
+				panic(err)
+			}
+			deJ, e := DeSerializerJson(msg.Payload)
+			if e == nil {
+				var topicDiscoveryData = TopicDiscoveryData{}
+				mapstructure.Decode(deJ, &topicDiscoveryData)
+
+				if topicDiscoveryData.Sender.NodeId == broker.Config.NodeId {
+					continue
+				}
+
+				// register node
+				checkNode := false
+				for _, n := range registryNodes {
+					if n.NodeId == topicDiscoveryData.Sender.NodeId {
+						checkNode = true
+					}
+				}
+				if !checkNode {
+					topicDiscoveryData.Sender.LastActive = int(time.Now().UnixMilli())
+					registryNodes = append(registryNodes, topicDiscoveryData.Sender)
+				}
+
+				// emit register service
+				info := TopicInfoData{}
+				info.Sender.IP = registryNode.IP
+				info.Sender.NodeId = broker.Config.NodeId
+
+				for _, s := range broker.Services {
+					var registryActions []RegistryAction
+					for _, a := range s.Actions {
+						registryActions = append(registryActions, RegistryAction{
+							Name:   a.Name,
+							Params: a.Params,
+						})
+					}
+					var registryEvents []RegistryEvent
+					for _, e := range s.Events {
+						registryEvents = append(registryEvents, RegistryEvent{
+							Name:   e.Name,
+							Params: e.Params,
+						})
+					}
+					info.Services = append(info.Services, RegistryService{
+						Node:    registryNode,
+						Name:    s.Name,
+						Actions: registryActions,
+						Events:  registryEvents,
+					})
+				}
+
+				// response info
+				channel := GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsInfo) + "." + topicDiscoveryData.Sender.NodeId
+				infoSeri, _ := SerializerJson(info)
+				rdb.Publish(ctx, channel, infoSeri)
+				logInfo("Node `" + topicDiscoveryData.Sender.NodeId + "` connected")
+			}
+		}
+	}()
+	// listen info
+	go func() {
+		pubsub := rdb.Subscribe(ctx, channelGlobalInfo)
+		defer pubsub.Close()
+		for {
+			msg, err := pubsub.ReceiveMessage(ctx)
+			if err != nil {
+				panic(err)
+			}
+			deJ, e := DeSerializerJson(msg.Payload)
+			if e == nil {
+				var topicInfoData = TopicInfoData{}
+				mapstructure.Decode(deJ, &topicInfoData)
+				if topicInfoData.Sender.NodeId == broker.Config.NodeId {
+					continue
+				}
+				// register
+				for _, rgi := range topicInfoData.Services {
+					check := false
+					for _, rgp := range registryServices {
+						if rgi.Node.NodeId == rgp.Node.NodeId && rgi.Name == rgp.Name {
+							check = true
+							break
+						}
+					}
+					if !check {
+						registryServices = append(registryServices, rgi)
+					}
+				}
+				logInfo("Receive info form `" + topicInfoData.Sender.NodeId + "`")
+			}
+		}
+	}()
+	// listen disconnect
+	go func() {
+		pubsub := rdb.Subscribe(ctx, channelGlobalDisconnect)
+		defer pubsub.Close()
+		for {
+			msg, err := pubsub.ReceiveMessage(ctx)
+			if err != nil {
+				panic(err)
+			}
+			deJ, e := DeSerializerJson(msg.Payload)
+
+			if e == nil {
+				var topicDiscoveryData = TopicDiscoveryData{}
+				mapstructure.Decode(deJ, &topicDiscoveryData)
+				if topicDiscoveryData.Sender.NodeId == broker.Config.NodeId {
+					continue
+				}
+
+				// remove node
+				for i, n := range registryNodes {
+					if n.NodeId == topicDiscoveryData.Sender.NodeId {
+						registryNodes = append(registryNodes[:i], registryNodes[i+1:]...)
+						continue
+					}
+				}
+
+				// remove service
+				tempRegistryServices := []RegistryService{}
+				for _, rgp := range registryServices {
+					if rgp.Node.NodeId != topicDiscoveryData.Sender.NodeId || rgp.Node.NodeId == broker.Config.NodeId {
+						tempRegistryServices = append(tempRegistryServices, rgp)
+					}
+				}
+				registryServices = tempRegistryServices
+				logInfo("Node `" + topicDiscoveryData.Sender.NodeId + "` disconnected")
+			}
+		}
+	}()
+	// listen heartbeat
+	go func() {
+		pubsub := rdb.Subscribe(ctx, channelGlobalHeartBeat)
+		defer pubsub.Close()
+		for {
+			msg, err := pubsub.ReceiveMessage(ctx)
+			if err != nil {
+				panic(err)
+			}
+			deJ, e := DeSerializerJson(msg.Payload)
+			if e == nil {
+				var topicHeartbeatData = TopicHeartbeatData{}
+				mapstructure.Decode(deJ, &topicHeartbeatData)
+
+				if topicHeartbeatData.Sender.NodeId == broker.Config.NodeId {
+					continue
+				}
+
+				// update node
+				for i := 0; i < len(registryNodes); i++ {
+					if registryNodes[i].NodeId == topicHeartbeatData.Sender.NodeId {
+						registryNodes[i].LastActive = int(time.Now().UnixMilli())
+					}
+				}
+			}
+		}
+	}()
+}
+func listenDiscoveryRedis(rdb *redis.Client) {
+	var ctx = context.Background()
+
+	// listen info
+	go func() {
+		pubsub := rdb.Subscribe(ctx, channelPrivateInfo)
+		defer pubsub.Close()
+		for {
+			msg, err := pubsub.ReceiveMessage(ctx)
+			if err != nil {
+				panic(err)
+			}
+			deJ, e := DeSerializerJson(msg.Payload)
+			if e == nil {
+				var topicInfoData = TopicInfoData{}
+				mapstructure.Decode(deJ, &topicInfoData)
+
+				// register node
+				checkNode := false
+				for _, n := range registryNodes {
+					if n.NodeId == topicInfoData.Sender.NodeId {
+						checkNode = true
+					}
+				}
+				if !checkNode {
+					topicInfoData.Sender.LastActive = int(time.Now().UnixMilli())
+					registryNodes = append(registryNodes, topicInfoData.Sender)
+				}
+				// register
+				for _, rgi := range topicInfoData.Services {
+					check := false
+					for _, rgp := range registryServices {
+						if rgi.Node.NodeId == rgp.Node.NodeId && rgi.Name == rgp.Name {
+							check = true
+							break
+						}
+					}
+					if !check {
+						registryServices = append(registryServices, rgi)
+					}
+				}
+				logInfo("Receive info form `" + topicInfoData.Sender.NodeId + "`")
+			}
+		}
+	}()
+}
+
+func broadcastGlobal(rdb *redis.Client) {
+	// publish discovery
+	go func() {
+		var ctx = context.Background()
+		info, _ := SerializerJson(TopicDiscoveryData{
+			Sender: RegistryNode{
+				NodeId: broker.Config.NodeId,
+			},
+		})
+		err := rdb.Publish(ctx, channelGlobalDiscovery, info).Err()
 		if err != nil {
 			panic(err)
 		}
-		deJ, e := DeSerializerJson(msg.Payload)
-		if e == nil {
-			var topicInfoData = TopicInfoData{}
-			mapstructure.Decode(deJ, &topicInfoData)
-			services := topicInfoData.Services
+	}()
+	// publish info
+	go func() {
+		var ctx = context.Background()
+		info, _ := SerializerJson(TopicInfoData{
+			Sender: RegistryNode{
+				NodeId: broker.Config.NodeId,
+			},
+			Services: registryServices,
+		})
+		err := rdb.Publish(ctx, channelGlobalInfo, info).Err()
+		if err != nil {
+			panic(err)
+		}
+	}()
+	// heartbeat
+	go func() {
+		for {
+			time.Sleep(time.Millisecond * time.Duration(broker.Config.DiscoveryConfig.HeartbeatInterval))
 
-			for _, service := range services {
-				var registryActions []RegistryAction
-				for _, a := range service.Actions {
-					registryActions = append(registryActions, RegistryAction{
-						Name:   a.Name,
-						Params: a.Params,
-					})
-				}
-				var registryEvents []RegistryEvent
-				for _, e := range service.Events {
-					registryEvents = append(registryEvents, RegistryEvent{
-						Name:   e.Name,
-						Params: e.Params,
-					})
-				}
-
-				registryServices = append(registryServices, RegistryService{
-					Node:    service.Node,
-					Name:    service.Name,
-					Actions: registryActions,
-					Events:  registryEvents,
-				})
+			var ctx = context.Background()
+			info, _ := SerializerJson(TopicHeartbeatData{
+				Sender: RegistryNode{
+					NodeId: broker.Config.NodeId,
+				},
+			})
+			err := rdb.Publish(ctx, channelGlobalHeartBeat, info).Err()
+			if err != nil {
+				panic(err)
 			}
 		}
-	}
+	}()
 }
 
-func broadcastRegistryInfo(rdb *redis.Client) {
-	logInfo("Discovery emit info service")
-	var ctx = context.Background()
-	channel := GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsInfo)
-
-	info, _ := SerializerJson(TopicInfoData{
-		Sender: RegistryNode{
-			NodeId: broker.Config.NodeId,
-		},
-		Services: registryServices,
-	})
-	err := rdb.Publish(ctx, channel, info).Err()
-	if err != nil {
-		panic(err)
-	}
+func clearNodeTimeout() {
+	go func() {
+		for {
+			time.Sleep(time.Second * 2)
+			now := time.Now().UnixMilli()
+			var tempNodes []RegistryNode
+			checkNodeTimeOut := false
+			for _, n := range registryNodes {
+				if now-int64(n.LastActive) <= int64(broker.Config.DiscoveryConfig.CleanOfflineNodesTimeout) {
+					tempNodes = append(tempNodes, n)
+				} else {
+					checkNodeTimeOut = true
+					logInfo("Node `" + n.NodeId + "` timeout. Removed")
+				}
+			}
+			if checkNodeTimeOut {
+				registryNodes = tempNodes
+				var tempServices []RegistryService
+				for _, s := range registryServices {
+					check := false
+					for _, n := range registryNodes {
+						if n.NodeId == s.Node.NodeId {
+							check = true
+						}
+					}
+					if check || s.Node.NodeId == broker.Config.NodeId {
+						tempServices = append(tempServices, s)
+					}
+				}
+				registryServices = tempServices
+			}
+		}
+	}()
 }
 
 // Get preferred outbound ip of this machine

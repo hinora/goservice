@@ -1,8 +1,9 @@
 package goservice
 
 type RegistryNode struct {
-	NodeId string   `json:"node_id" mapstructure:"node_id"`
-	IP     []string `json:"ip" mapstructure:"ip"`
+	NodeId     string   `json:"node_id" mapstructure:"node_id"`
+	IP         []string `json:"ip" mapstructure:"ip"`
+	LastActive int      `json:"last_active" mapstructure:"last_active"`
 }
 type RegistryAction struct {
 	Name   string      `json:"name" mapstructure:"name"`
