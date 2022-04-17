@@ -30,6 +30,7 @@ var broker Broker
 var debouncedEmitInfo func(f func())
 
 func Init(config BrokerConfig) {
+	initMetrics()
 	broker = Broker{
 		Config: config,
 	}

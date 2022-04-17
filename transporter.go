@@ -230,18 +230,10 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 	data := make(chan ResponseTranferData, 1)
 	var err error
 	channelInternal := ""
-	// loop
-	var action RegistryAction
-	var service RegistryService
-	for _, s := range registryServices {
-		for _, a := range s.Actions {
-			if actionName == s.Name+"."+a.Name {
-				action = a
-				service = s
-			}
-		}
-	}
-	if action.Name == "" && service.Name == "" {
+
+	// chose node call
+	service, action := balancingRoundRobin(actionName)
+	if service.Name == "" && action.Name == "" {
 		return ResponseTranferData{}, errors.New("Action or event `" + actionName + "` is not existed")
 	}
 	go func() {

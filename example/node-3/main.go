@@ -8,7 +8,7 @@ import (
 
 func main() {
 	goservice.Init(goservice.BrokerConfig{
-		NodeId: "Node-2",
+		NodeId: "Node-3",
 		DiscoveryConfig: goservice.DiscoveryConfig{
 			DiscoveryType: goservice.DiscoveryTypeRedis,
 			Config: goservice.DiscoveryRedisConfig{
@@ -36,9 +36,7 @@ func main() {
 				Name:   "say_hi",
 				Params: map[string]interface{}{},
 				Handle: func(ctx *goservice.Context) (interface{}, error) {
-					fmt.Println("Handle action say hi from node 2")
-					data, err := ctx.Call("math.plus", nil, nil)
-					fmt.Println("Response from math.plus: ", data, err)
+					fmt.Println("Handle action say hi from node 3")
 					return "This is result from action say hi", nil
 				},
 			},

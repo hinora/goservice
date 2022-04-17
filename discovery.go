@@ -355,9 +355,7 @@ func broadcastGlobal(rdb *redis.Client) {
 	go func() {
 		var ctx = context.Background()
 		info, _ := SerializerJson(TopicDiscoveryData{
-			Sender: RegistryNode{
-				NodeId: broker.Config.NodeId,
-			},
+			Sender: registryNode,
 		})
 		err := rdb.Publish(ctx, channelGlobalDiscovery, info).Err()
 		if err != nil {
@@ -368,9 +366,7 @@ func broadcastGlobal(rdb *redis.Client) {
 	go func() {
 		var ctx = context.Background()
 		info, _ := SerializerJson(TopicInfoData{
-			Sender: RegistryNode{
-				NodeId: broker.Config.NodeId,
-			},
+			Sender:   registryNode,
 			Services: registryServices,
 		})
 		err := rdb.Publish(ctx, channelGlobalInfo, info).Err()
@@ -385,9 +381,7 @@ func broadcastGlobal(rdb *redis.Client) {
 
 			var ctx = context.Background()
 			info, _ := SerializerJson(TopicHeartbeatData{
-				Sender: RegistryNode{
-					NodeId: broker.Config.NodeId,
-				},
+				Sender: registryNode,
 			})
 			err := rdb.Publish(ctx, channelGlobalHeartBeat, info).Err()
 			if err != nil {
