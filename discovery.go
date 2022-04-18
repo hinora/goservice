@@ -233,7 +233,7 @@ func listenDiscoveryGlobalRedis(rdb *redis.Client) {
 						registryServices = append(registryServices, rgi)
 					}
 				}
-				logInfo("Receive info form `" + topicInfoData.Sender.NodeId + "`")
+				logInfo("Receive info from `" + topicInfoData.Sender.NodeId + "`")
 			}
 		}
 	}()
@@ -344,7 +344,7 @@ func listenDiscoveryRedis(rdb *redis.Client) {
 						registryServices = append(registryServices, rgi)
 					}
 				}
-				logInfo("Receive info form `" + topicInfoData.Sender.NodeId + "`")
+				logInfo("Receive info from `" + topicInfoData.Sender.NodeId + "`")
 			}
 		}
 	}()

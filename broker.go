@@ -12,8 +12,8 @@ type BrokerConfig struct {
 	NodeId            string
 	TransporterConfig TransporterConfig
 	Logger            string
-	Matrics           string
-	Trace             string
+	Metrics           string
+	TraceConfig       TraceConfig
 	DiscoveryConfig   DiscoveryConfig
 	RequestTimeOut    int
 }
@@ -36,6 +36,7 @@ func Init(config BrokerConfig) {
 	}
 	initDiscovery()
 	initTransporter()
+	initTrace()
 	debouncedEmitInfo = debounce.New(1000 * time.Millisecond)
 }
 
@@ -70,24 +71,31 @@ func LoadService(service Service) {
 	// handle logic service
 
 	// service lifecycle
-	// started
-	context := Context{
-		RequestId:    uuid.New().String(),
-		Params:       map[string]interface{}{},
-		Meta:         map[string]interface{}{},
-		FromService:  "",
-		FromNode:     broker.Config.NodeId,
-		CallingLevel: 1,
-	}
-	context.Call = func(action string, params interface{}, meta interface{}) (interface{}, error) {
-		callResult, err := callAction(context, action, params, meta, "", "")
-		if err != nil {
-			return nil, err
-		}
-		return callResult.Data, err
-	}
+
 	if service.Started != nil {
-		go service.Started(&context)
+		go func() {
+			//trace
+			spanId := startTraceSpan("Service `"+service.Name+"` started", "action", "", "", map[string]interface{}{}, "", "", 1, "")
+			// started
+
+			context := Context{
+				RequestId:    uuid.New().String(),
+				Params:       map[string]interface{}{},
+				Meta:         map[string]interface{}{},
+				FromService:  "",
+				FromNode:     broker.Config.NodeId,
+				CallingLevel: 1,
+			}
+			context.Call = func(action string, params interface{}, meta interface{}) (interface{}, error) {
+				callResult, err := callAction(context, action, params, meta, "", "", spanId)
+				if err != nil {
+					return nil, err
+				}
+				return callResult.Data, err
+			}
+			service.Started(&context)
+			endTraceSpan(spanId, nil)
+		}()
 	}
 
 	// actions handle

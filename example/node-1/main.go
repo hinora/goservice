@@ -28,6 +28,10 @@ func main() {
 			},
 		},
 		RequestTimeOut: 5000,
+		TraceConfig: goservice.TraceConfig{
+			Enabled:      true,
+			TraceExpoter: goservice.TraceExporterConsole,
+		},
 	})
 	goservice.LoadService(goservice.Service{
 		Name: "math",
@@ -47,8 +51,8 @@ func main() {
 
 			data, err := ctx.Call("hello.say_hi", nil, nil)
 			fmt.Println("Response from say hi: ", data, err)
-			data2, err2 := ctx.Call("hello.say_hi", nil, nil)
-			fmt.Println("Response from say hi: ", data2, err2)
+			// data2, err2 := ctx.Call("hello.say_hi", nil, nil)
+			// fmt.Println("Response from say hi: ", data2, err2)
 		},
 	})
 	goservice.Hold()

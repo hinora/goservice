@@ -27,6 +27,10 @@ func main() {
 			},
 		},
 		RequestTimeOut: 5000,
+		TraceConfig: goservice.TraceConfig{
+			Enabled:      true,
+			TraceExpoter: goservice.TraceExporterConsole,
+		},
 	})
 
 	goservice.LoadService(goservice.Service{
