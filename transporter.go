@@ -3,7 +3,6 @@ package goservice
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -193,7 +192,7 @@ func listenActionCall(serviceName string, action Action) {
 				FromNode:      data.CallerNodeId,
 				FromService:   data.CallerService,
 				FromAction:    data.CallerAction,
-				CallingLevel:  data.CallingLevel + 1,
+				CallingLevel:  data.CallingLevel,
 			}
 
 			// start trace
@@ -226,11 +225,13 @@ func listenActionCall(serviceName string, action Action) {
 			if broker.Config.TraceConfig.TraceExpoter == TraceExporterConsole {
 				traceSpans := findTraceChildrensDeep(spanId)
 				for _, s := range traceSpans {
-					responseTranferData.TraceSpans = append(responseTranferData.TraceSpans, *s)
+					if s.Tags.CallerNodeId != data.CallerNodeId {
+						responseTranferData.TraceSpans = append(responseTranferData.TraceSpans, *s)
+					}
 				}
 				trans, errFind := findSpan(spanId)
-				if errFind != nil {
-					traceSpans = append(traceSpans, trans)
+				if errFind == nil {
+					responseTranferData.TraceSpans = append(responseTranferData.TraceSpans, *trans)
 				}
 			}
 
@@ -304,7 +305,6 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 		if err != nil {
 			return ResponseTranferData{}, err
 		}
-		fmt.Println("response trace:", res.TraceSpans)
 		addTraceSpans(res.TraceSpans)
 		return res, nil
 	case <-time.After(time.Duration(broker.Config.RequestTimeOut) * time.Millisecond):

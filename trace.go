@@ -2,7 +2,6 @@ package goservice
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,6 +44,12 @@ type TraceExpoter int
 type TraceConsoleConfig struct {
 }
 
+type Trace struct {
+	Exporter interface{}
+}
+
+var trace Trace
+
 const (
 	TraceExporterConsole TraceExpoter = iota + 1
 	TraceExporterDDDog
@@ -54,6 +59,12 @@ var traceSpans map[string]*traceSpan
 
 func initTrace() {
 	traceSpans = map[string]*traceSpan{}
+	switch broker.Config.TraceConfig.TraceExpoter {
+	case TraceExporterConsole:
+		trace = Trace{
+			Exporter: initTraceConsole(),
+		}
+	}
 }
 
 func addTraceSpan(span *traceSpan) string {
@@ -111,12 +122,16 @@ func endTraceSpan(spanId string, err error) {
 		span.Error = err
 	}
 
-	spans := findTraceChildrens(span.Tags.RequestId)
-	for _, s := range spans {
-		fmt.Println("Trace: ", *s)
+	spanChild := findTraceChildrens(span.Tags.RequestId)
+	// for _, v := range spanChild {
+	// 	delete(traceSpans, v.TraceId)
+	// }
+
+	switch broker.Config.TraceConfig.TraceExpoter {
+	case TraceExporterConsole:
+		ex := trace.Exporter.(*traceConsole)
+		ex.ExportSpan(spanChild)
 	}
-	// export trace span to trace exporter
-	// go s.Trace.PrintSpan(spanId)
 }
 func findSpan(spanId string) (*traceSpan, error) {
 	if value, ok := traceSpans[spanId]; ok {
