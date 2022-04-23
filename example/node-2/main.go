@@ -41,8 +41,8 @@ func main() {
 				Params: map[string]interface{}{},
 				Handle: func(ctx *goservice.Context) (interface{}, error) {
 					fmt.Println("Handle action say hi from node 2")
-					// data, err := ctx.Call("math.plus", nil, nil)
-					// fmt.Println("Response from math.plus: ", data, err)
+					data, err := ctx.Call("math.plus", nil, nil)
+					fmt.Println("Response from math.plus: ", data, err)
 					return "This is result from action say hi", nil
 				},
 			},

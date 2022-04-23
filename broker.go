@@ -75,19 +75,21 @@ func LoadService(service Service) {
 	if service.Started != nil {
 		go func() {
 			//trace
-			spanId := startTraceSpan("Service `"+service.Name+"` started", "action", "", "", map[string]interface{}{}, "", "", 1, "")
+			spanId := startTraceSpan("Service `"+service.Name+"` started", "action", "", "", map[string]interface{}{}, "", "", 1)
 			// started
 
 			context := Context{
-				RequestId:    uuid.New().String(),
-				Params:       map[string]interface{}{},
-				Meta:         map[string]interface{}{},
-				FromService:  "",
-				FromNode:     broker.Config.NodeId,
-				CallingLevel: 1,
+				RequestId:         uuid.New().String(),
+				Params:            map[string]interface{}{},
+				Meta:              map[string]interface{}{},
+				FromService:       "",
+				FromNode:          broker.Config.NodeId,
+				CallingLevel:      1,
+				TraceParentId:     spanId,
+				TraceParentRootId: spanId,
 			}
 			context.Call = func(action string, params interface{}, meta interface{}) (interface{}, error) {
-				callResult, err := callAction(context, action, params, meta, "", "", spanId)
+				callResult, err := callAction(context, action, params, meta, "", "")
 				if err != nil {
 					return nil, err
 				}

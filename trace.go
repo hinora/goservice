@@ -2,6 +2,7 @@ package goservice
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,6 +74,7 @@ func addTraceSpan(span *traceSpan) string {
 }
 func addTraceSpans(spans []traceSpan) {
 	for _, s := range spans {
+		fmt.Println("add traces: ", &s)
 		traceSpans[s.TraceId] = &s
 	}
 }
@@ -122,13 +124,17 @@ func endTraceSpan(spanId string, err error) {
 		span.Error = err
 	}
 
-	spanChild := findTraceChildrens(span.Tags.RequestId)
-	// for _, v := range spanChild {
-	// 	delete(traceSpans, v.TraceId)
-	// }
-
 	switch broker.Config.TraceConfig.TraceExpoter {
 	case TraceExporterConsole:
+		spanChild := findTraceChildrens(span.Tags.RequestId)
+		for _, v := range spanChild {
+			// delete(traceSpans, v.TraceId)
+			fmt.Println("Trace: ", *v)
+		}
+		for _, v := range traceSpans {
+			// delete(traceSpans, v.TraceId)
+			fmt.Println("Trace list: ", *v)
+		}
 		ex := trace.Exporter.(*traceConsole)
 		ex.ExportSpan(spanChild)
 	}

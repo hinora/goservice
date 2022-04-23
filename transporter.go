@@ -184,22 +184,24 @@ func listenActionCall(serviceName string, action Action) {
 
 			responseId := data.ResponseId
 			ctx := Context{
-				RequestId:     data.TraceRootParentId,
-				ResponseId:    uuid.New().String(),
-				TraceParentId: data.TraceParentId,
-				Params:        data.Params,
-				Meta:          data.Meta,
-				FromNode:      data.CallerNodeId,
-				FromService:   data.CallerService,
-				FromAction:    data.CallerAction,
-				CallingLevel:  data.CallingLevel,
+				RequestId:         uuid.New().String(),
+				ResponseId:        uuid.New().String(),
+				Params:            data.Params,
+				Meta:              data.Meta,
+				FromNode:          data.CallerNodeId,
+				FromService:       data.CallerService,
+				FromAction:        data.CallerAction,
+				CallingLevel:      data.CallingLevel,
+				TraceParentId:     data.TraceParentId,
+				TraceParentRootId: data.TraceRootParentId,
 			}
 
 			// start trace
-			spanId := startTraceSpan("Action `"+serviceName+"."+action.Name+"`", "action", serviceName, action.Name, data.Params, ctx.FromNode, ctx.TraceParentId, ctx.CallingLevel+1, ctx.RequestId)
+			spanId := startTraceSpan("Action `"+serviceName+"."+action.Name+"`", "action", serviceName, action.Name, data.Params, ctx.FromNode, ctx.TraceParentId, ctx.CallingLevel, data.TraceRootParentId)
 
+			ctx.TraceParentId = spanId
 			ctx.Call = func(a string, params interface{}, meta interface{}) (interface{}, error) {
-				callResult, err := callAction(ctx, a, params, meta, serviceName, action.Name, spanId)
+				callResult, err := callAction(ctx, a, params, meta, serviceName, action.Name)
 				if err != nil {
 					return nil, err
 				}
@@ -251,7 +253,7 @@ func listenActionCall(serviceName string, action Action) {
 }
 
 // calling
-func callAction(ctx Context, actionName string, params interface{}, meta interface{}, callerService string, callerAction string, spanId string) (ResponseTranferData, error) {
+func callAction(ctx Context, actionName string, params interface{}, meta interface{}, callerService string, callerAction string) (ResponseTranferData, error) {
 	data := make(chan ResponseTranferData, 1)
 	var err error
 	channelInternal := ""
@@ -268,18 +270,19 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 		responseId := uuid.New().String()
 		channelInternal = GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + responseId
 		dataSend := RequestTranferData{
-			Params:        params,
-			Meta:          meta,
-			RequestId:     ctx.RequestId,
-			ResponseId:    responseId,
-			CallerNodeId:  broker.Config.NodeId,
-			CallerService: callerService,
-			CallerAction:  callerAction,
-			CallingLevel:  ctx.CallingLevel + 1,
-			CalledTime:    time.Now().UnixNano(),
-			CallToService: service.Name,
-			CallToAction:  action.Name,
-			TraceParentId: spanId,
+			Params:            params,
+			Meta:              meta,
+			RequestId:         ctx.RequestId,
+			ResponseId:        responseId,
+			CallerNodeId:      broker.Config.NodeId,
+			CallerService:     callerService,
+			CallerAction:      callerAction,
+			CallingLevel:      ctx.CallingLevel + 1,
+			CalledTime:        time.Now().UnixNano(),
+			CallToService:     service.Name,
+			CallToAction:      action.Name,
+			TraceParentId:     ctx.TraceParentId,
+			TraceRootParentId: ctx.TraceParentRootId,
 		}
 		// Subscribe response data
 		bus.Subscribe(channelInternal, func(d interface{}) {
