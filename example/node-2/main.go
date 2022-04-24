@@ -41,8 +41,19 @@ func main() {
 				Params: map[string]interface{}{},
 				Handle: func(ctx *goservice.Context) (interface{}, error) {
 					fmt.Println("Handle action say hi from node 2")
+					// var wg sync.WaitGroup
+					// wg.Add(1)
+					// go func() {
+					// 	defer wg.Done()
 					data, err := ctx.Call("math.plus", nil, nil)
 					fmt.Println("Response from math.plus: ", data, err)
+					// }()
+					// go func() {
+					// 	defer wg.Done()
+					data1, err1 := ctx.Call("math.plus", nil, nil)
+					fmt.Println("Response from math.plus: ", data1, err1)
+					// }()
+					// wg.Wait()
 					return "This is result from action say hi", nil
 				},
 			},

@@ -89,7 +89,20 @@ func LoadService(service Service) {
 				TraceParentRootId: spanId,
 			}
 			context.Call = func(action string, params interface{}, meta interface{}) (interface{}, error) {
-				callResult, err := callAction(context, action, params, meta, "", "")
+				ctxCall := Context{
+					RequestId:         uuid.New().String(),
+					ResponseId:        uuid.New().String(),
+					Params:            params,
+					Meta:              meta,
+					FromNode:          broker.Config.NodeId,
+					FromService:       service.Name,
+					FromAction:        "",
+					CallingLevel:      1,
+					TraceParentId:     spanId,
+					TraceParentRootId: spanId,
+				}
+				callResult, err := callAction(ctxCall, action, params, meta, service.Name, "")
+				addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
 				}

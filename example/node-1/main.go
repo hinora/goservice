@@ -41,6 +41,7 @@ func main() {
 				Params: map[string]interface{}{},
 				Handle: func(context *goservice.Context) (interface{}, error) {
 					fmt.Println("Handle action plus")
+					time.Sleep(time.Second * 1)
 					return "This is result from action math.plus", nil
 				},
 			},

@@ -20,8 +20,9 @@ func balancingRoundRobin(name string) (RegistryService, RegistryAction) {
 			}
 		}
 	}
-
 	if len(actions) != 0 {
+		ra = actions[0]
+		rs = services[0]
 		for i, a := range actions {
 			nameCheck := MCountCall + "." + services[i].Node.NodeId + "." + services[i].Name + "." + a.Name
 			if expvar.Get(nameCheck) == nil {

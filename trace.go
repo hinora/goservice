@@ -2,7 +2,6 @@ package goservice
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -60,6 +59,9 @@ var traceSpans map[string]*traceSpan
 
 func initTrace() {
 	traceSpans = map[string]*traceSpan{}
+	if !broker.Config.TraceConfig.Enabled {
+		return
+	}
 	switch broker.Config.TraceConfig.TraceExpoter {
 	case TraceExporterConsole:
 		trace = Trace{
@@ -69,17 +71,25 @@ func initTrace() {
 }
 
 func addTraceSpan(span *traceSpan) string {
+	if !broker.Config.TraceConfig.Enabled {
+		return ""
+	}
 	traceSpans[span.TraceId] = span
 	return span.TraceId
 }
 func addTraceSpans(spans []traceSpan) {
-	for _, s := range spans {
-		fmt.Println("add traces: ", &s)
-		traceSpans[s.TraceId] = &s
+	if !broker.Config.TraceConfig.Enabled {
+		return
+	}
+	for i := 0; i < len(spans); i++ {
+		traceSpans[spans[i].TraceId] = &spans[i]
 	}
 }
 
 func startTraceSpan(name string, types string, service string, action string, params interface{}, callerNodeId string, parentId string, callingLevel int, requestId ...string) string {
+	if !broker.Config.TraceConfig.Enabled {
+		return ""
+	}
 	id := uuid.New().String()
 	remoteCall := false
 	if callerNodeId != "" && broker.Config.NodeId != callerNodeId {
@@ -114,6 +124,9 @@ func startTraceSpan(name string, types string, service string, action string, pa
 }
 
 func endTraceSpan(spanId string, err error) {
+	if !broker.Config.TraceConfig.Enabled {
+		return
+	}
 	span, e := findSpan(spanId)
 	if e != nil {
 		return
@@ -126,17 +139,11 @@ func endTraceSpan(spanId string, err error) {
 
 	switch broker.Config.TraceConfig.TraceExpoter {
 	case TraceExporterConsole:
-		spanChild := findTraceChildrens(span.Tags.RequestId)
-		for _, v := range spanChild {
-			// delete(traceSpans, v.TraceId)
-			fmt.Println("Trace: ", *v)
+		if span.TraceId == span.Tags.RequestId {
+			spanChild := findTraceChildrens(span.Tags.RequestId)
+			ex := trace.Exporter.(*traceConsole)
+			ex.ExportSpan(spanChild)
 		}
-		for _, v := range traceSpans {
-			// delete(traceSpans, v.TraceId)
-			fmt.Println("Trace list: ", *v)
-		}
-		ex := trace.Exporter.(*traceConsole)
-		ex.ExportSpan(spanChild)
 	}
 }
 func findSpan(spanId string) (*traceSpan, error) {
@@ -157,9 +164,9 @@ func findTraceChildrens(requestID string) []*traceSpan {
 }
 func findTraceChildrensDeep(spanId string) []*traceSpan {
 	traces := []*traceSpan{}
-	for k, v := range traceSpans {
+	for _, v := range traceSpans {
 		if v.ParentId == spanId {
-			traces = append(traces, traceSpans[k])
+			traces = append(traces, v)
 		}
 	}
 	if len(traces) != 0 {

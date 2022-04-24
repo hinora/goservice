@@ -201,7 +201,20 @@ func listenActionCall(serviceName string, action Action) {
 
 			ctx.TraceParentId = spanId
 			ctx.Call = func(a string, params interface{}, meta interface{}) (interface{}, error) {
-				callResult, err := callAction(ctx, a, params, meta, serviceName, action.Name)
+				ctxCall := Context{
+					RequestId:         uuid.New().String(),
+					ResponseId:        uuid.New().String(),
+					Params:            params,
+					Meta:              meta,
+					FromNode:          broker.Config.NodeId,
+					FromService:       serviceName,
+					FromAction:        action.Name,
+					CallingLevel:      data.CallingLevel,
+					TraceParentId:     spanId,
+					TraceParentRootId: data.TraceRootParentId,
+				}
+				callResult, err := callAction(ctxCall, a, params, meta, serviceName, action.Name)
+				addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
 				}
@@ -225,15 +238,15 @@ func listenActionCall(serviceName string, action Action) {
 
 			// response trace if the exporter is console
 			if broker.Config.TraceConfig.TraceExpoter == TraceExporterConsole {
-				traceSpans := findTraceChildrensDeep(spanId)
-				for _, s := range traceSpans {
-					if s.Tags.CallerNodeId != data.CallerNodeId {
-						responseTranferData.TraceSpans = append(responseTranferData.TraceSpans, *s)
-					}
-				}
 				trans, errFind := findSpan(spanId)
 				if errFind == nil {
 					responseTranferData.TraceSpans = append(responseTranferData.TraceSpans, *trans)
+					traceSpans := findTraceChildrensDeep(trans.TraceId)
+					for _, s := range traceSpans {
+						// if s.Tags.CallerNodeId != data.CallerNodeId {
+						responseTranferData.TraceSpans = append(responseTranferData.TraceSpans, *s)
+						// }
+					}
 				}
 			}
 
@@ -308,6 +321,7 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 		if err != nil {
 			return ResponseTranferData{}, err
 		}
+		// fmt.Println("Traces response: ", res.TraceSpans)
 		addTraceSpans(res.TraceSpans)
 		return res, nil
 	case <-time.After(time.Duration(broker.Config.RequestTimeOut) * time.Millisecond):
