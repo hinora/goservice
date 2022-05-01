@@ -6,13 +6,13 @@ import (
 	"github.com/zserge/metric"
 )
 
-func balancingRoundRobin(name string) (RegistryService, RegistryAction) {
+func (b *Broker) balancingRoundRobin(name string) (RegistryService, RegistryAction) {
 	var rs RegistryService
 	var ra RegistryAction
 	var minCall float64 = 0
 	var actions []RegistryAction
 	var services []RegistryService
-	for _, s := range registryServices {
+	for _, s := range b.registryServices {
 		for _, a := range s.Actions {
 			if name == s.Name+"."+a.Name {
 				actions = append(actions, a)
@@ -25,9 +25,9 @@ func balancingRoundRobin(name string) (RegistryService, RegistryAction) {
 		rs = services[0]
 		for i, a := range actions {
 			nameCheck := MCountCall + "." + services[i].Node.NodeId + "." + services[i].Name + "." + a.Name
-			if expvar.Get(nameCheck) == nil {
-				expvar.Publish(nameCheck, metric.NewCounter(MCountCallTime))
-			}
+			// if expvar.Get(nameCheck) == nil {
+			// 	expvar.Publish(nameCheck, metric.NewCounter(MCountCallTime))
+			// }
 
 			countCheck := MetricsGetValueCounter(expvar.Get(nameCheck).(metric.Metric))
 			if countCheck <= minCall {

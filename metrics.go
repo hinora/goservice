@@ -2,6 +2,7 @@ package goservice
 
 import (
 	"encoding/json"
+	"expvar"
 
 	"github.com/zserge/metric"
 )
@@ -23,6 +24,17 @@ func MetricsGetValueCounter(m metric.Metric) float64 {
 		total += int(data.Samples[i].Count)
 	}
 	return float64(total)
+}
+
+func (b *Broker) initMestricCountCallAction() {
+	for _, s := range b.registryServices {
+		for _, a := range s.Actions {
+			nameCheck := MCountCall + "." + s.Node.NodeId + "." + s.Name + "." + a.Name
+			if expvar.Get(nameCheck) == nil {
+				expvar.Publish(nameCheck, metric.NewCounter(MCountCallTime))
+			}
+		}
+	}
 }
 
 const (

@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	goservice.Init(goservice.BrokerConfig{
+	b := goservice.Init(goservice.BrokerConfig{
 		NodeId: "Node-3",
 		DiscoveryConfig: goservice.DiscoveryConfig{
 			DiscoveryType: goservice.DiscoveryTypeRedis,
@@ -33,7 +33,7 @@ func main() {
 		},
 	})
 
-	goservice.LoadService(goservice.Service{
+	b.LoadService(goservice.Service{
 		Name: "hello",
 		Actions: []goservice.Action{
 			{
@@ -46,5 +46,5 @@ func main() {
 			},
 		},
 	})
-	goservice.Hold()
+	b.Hold()
 }

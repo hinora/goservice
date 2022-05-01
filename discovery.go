@@ -92,31 +92,24 @@ const (
 	channelGlobalDisconnect = GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsDisconnect)
 )
 
-var (
-	channelPrivateInfo string
-)
-var registryServices []RegistryService
-var registryNodes []RegistryNode
-var registryNode RegistryNode
+func (b *Broker) initDiscovery() {
+	b.channelPrivateInfo = GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsInfo) + "." + b.Config.NodeId
 
-func initDiscovery() {
-	channelPrivateInfo = GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsInfo) + "." + broker.Config.NodeId
-
-	ip, err := getOutboundIP()
+	ip, err := b.getOutboundIP()
 	if err != nil {
 		panic(err)
 	}
-	registryNode = RegistryNode{
-		NodeId: broker.Config.NodeId,
+	b.registryNode = RegistryNode{
+		NodeId: b.Config.NodeId,
 		IP:     []string{ip.String()},
 	}
-	registryNodes = []RegistryNode{}
+	b.registryNodes = []RegistryNode{}
 }
 
-func startDiscovery() {
-	switch broker.Config.DiscoveryConfig.DiscoveryType {
+func (b *Broker) startDiscovery() {
+	switch b.Config.DiscoveryConfig.DiscoveryType {
 	case DiscoveryTypeRedis:
-		config := broker.Config.DiscoveryConfig.Config.(DiscoveryRedisConfig)
+		config := b.Config.DiscoveryConfig.Config.(DiscoveryRedisConfig)
 		rdb := redis.NewClient(&redis.Options{
 			Addr:     config.Host + ":" + strconv.Itoa(config.Port),
 			Password: config.Password,
@@ -124,19 +117,19 @@ func startDiscovery() {
 		})
 
 		// start listen
-		go listenDiscoveryRedis(rdb)
-		go listenDiscoveryGlobalRedis(rdb)
+		go b.listenDiscoveryRedis(rdb)
+		go b.listenDiscoveryGlobalRedis(rdb)
 		// broadcast info
-		broadcastGlobal(rdb)
+		b.broadcastGlobal(rdb)
 
 		// clear node timeout
-		clearNodeTimeout()
+		b.clearNodeTimeout()
 		break
 	}
 
 }
 
-func listenDiscoveryGlobalRedis(rdb *redis.Client) {
+func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 	var ctx = context.Background()
 	// listen discovery
 	go func() {
@@ -152,28 +145,28 @@ func listenDiscoveryGlobalRedis(rdb *redis.Client) {
 				var topicDiscoveryData = TopicDiscoveryData{}
 				mapstructure.Decode(deJ, &topicDiscoveryData)
 
-				if topicDiscoveryData.Sender.NodeId == broker.Config.NodeId {
+				if topicDiscoveryData.Sender.NodeId == b.Config.NodeId {
 					continue
 				}
 
 				// register node
 				checkNode := false
-				for _, n := range registryNodes {
+				for _, n := range b.registryNodes {
 					if n.NodeId == topicDiscoveryData.Sender.NodeId {
 						checkNode = true
 					}
 				}
 				if !checkNode {
 					topicDiscoveryData.Sender.LastActive = int(time.Now().UnixMilli())
-					registryNodes = append(registryNodes, topicDiscoveryData.Sender)
+					b.registryNodes = append(b.registryNodes, topicDiscoveryData.Sender)
 				}
 
 				// emit register service
 				info := TopicInfoData{}
-				info.Sender.IP = registryNode.IP
-				info.Sender.NodeId = broker.Config.NodeId
+				info.Sender.IP = b.registryNode.IP
+				info.Sender.NodeId = b.Config.NodeId
 
-				for _, s := range broker.Services {
+				for _, s := range b.Services {
 					var registryActions []RegistryAction
 					for _, a := range s.Actions {
 						registryActions = append(registryActions, RegistryAction{
@@ -189,7 +182,7 @@ func listenDiscoveryGlobalRedis(rdb *redis.Client) {
 						})
 					}
 					info.Services = append(info.Services, RegistryService{
-						Node:    registryNode,
+						Node:    b.registryNode,
 						Name:    s.Name,
 						Actions: registryActions,
 						Events:  registryEvents,
@@ -217,22 +210,23 @@ func listenDiscoveryGlobalRedis(rdb *redis.Client) {
 			if e == nil {
 				var topicInfoData = TopicInfoData{}
 				mapstructure.Decode(deJ, &topicInfoData)
-				if topicInfoData.Sender.NodeId == broker.Config.NodeId {
+				if topicInfoData.Sender.NodeId == b.Config.NodeId {
 					continue
 				}
 				// register
 				for _, rgi := range topicInfoData.Services {
 					check := false
-					for _, rgp := range registryServices {
+					for _, rgp := range b.registryServices {
 						if rgi.Node.NodeId == rgp.Node.NodeId && rgi.Name == rgp.Name {
 							check = true
 							break
 						}
 					}
 					if !check {
-						registryServices = append(registryServices, rgi)
+						b.registryServices = append(b.registryServices, rgi)
 					}
 				}
+				b.initMestricCountCallAction()
 				logInfo("Receive info from `" + topicInfoData.Sender.NodeId + "`")
 			}
 		}
@@ -251,26 +245,26 @@ func listenDiscoveryGlobalRedis(rdb *redis.Client) {
 			if e == nil {
 				var topicDiscoveryData = TopicDiscoveryData{}
 				mapstructure.Decode(deJ, &topicDiscoveryData)
-				if topicDiscoveryData.Sender.NodeId == broker.Config.NodeId {
+				if topicDiscoveryData.Sender.NodeId == b.Config.NodeId {
 					continue
 				}
 
 				// remove node
-				for i, n := range registryNodes {
+				for i, n := range b.registryNodes {
 					if n.NodeId == topicDiscoveryData.Sender.NodeId {
-						registryNodes = append(registryNodes[:i], registryNodes[i+1:]...)
+						b.registryNodes = append(b.registryNodes[:i], b.registryNodes[i+1:]...)
 						continue
 					}
 				}
 
 				// remove service
 				tempRegistryServices := []RegistryService{}
-				for _, rgp := range registryServices {
-					if rgp.Node.NodeId != topicDiscoveryData.Sender.NodeId || rgp.Node.NodeId == broker.Config.NodeId {
+				for _, rgp := range b.registryServices {
+					if rgp.Node.NodeId != topicDiscoveryData.Sender.NodeId || rgp.Node.NodeId == b.Config.NodeId {
 						tempRegistryServices = append(tempRegistryServices, rgp)
 					}
 				}
-				registryServices = tempRegistryServices
+				b.registryServices = tempRegistryServices
 				logInfo("Node `" + topicDiscoveryData.Sender.NodeId + "` disconnected")
 			}
 		}
@@ -289,26 +283,26 @@ func listenDiscoveryGlobalRedis(rdb *redis.Client) {
 				var topicHeartbeatData = TopicHeartbeatData{}
 				mapstructure.Decode(deJ, &topicHeartbeatData)
 
-				if topicHeartbeatData.Sender.NodeId == broker.Config.NodeId {
+				if topicHeartbeatData.Sender.NodeId == b.Config.NodeId {
 					continue
 				}
 
 				// update node
-				for i := 0; i < len(registryNodes); i++ {
-					if registryNodes[i].NodeId == topicHeartbeatData.Sender.NodeId {
-						registryNodes[i].LastActive = int(time.Now().UnixMilli())
+				for i := 0; i < len(b.registryNodes); i++ {
+					if b.registryNodes[i].NodeId == topicHeartbeatData.Sender.NodeId {
+						b.registryNodes[i].LastActive = int(time.Now().UnixMilli())
 					}
 				}
 			}
 		}
 	}()
 }
-func listenDiscoveryRedis(rdb *redis.Client) {
+func (b *Broker) listenDiscoveryRedis(rdb *redis.Client) {
 	var ctx = context.Background()
 
 	// listen info
 	go func() {
-		pubsub := rdb.Subscribe(ctx, channelPrivateInfo)
+		pubsub := rdb.Subscribe(ctx, b.channelPrivateInfo)
 		defer pubsub.Close()
 		for {
 			msg, err := pubsub.ReceiveMessage(ctx)
@@ -322,40 +316,41 @@ func listenDiscoveryRedis(rdb *redis.Client) {
 
 				// register node
 				checkNode := false
-				for _, n := range registryNodes {
+				for _, n := range b.registryNodes {
 					if n.NodeId == topicInfoData.Sender.NodeId {
 						checkNode = true
 					}
 				}
 				if !checkNode {
 					topicInfoData.Sender.LastActive = int(time.Now().UnixMilli())
-					registryNodes = append(registryNodes, topicInfoData.Sender)
+					b.registryNodes = append(b.registryNodes, topicInfoData.Sender)
 				}
 				// register
 				for _, rgi := range topicInfoData.Services {
 					check := false
-					for _, rgp := range registryServices {
+					for _, rgp := range b.registryServices {
 						if rgi.Node.NodeId == rgp.Node.NodeId && rgi.Name == rgp.Name {
 							check = true
 							break
 						}
 					}
 					if !check {
-						registryServices = append(registryServices, rgi)
+						b.registryServices = append(b.registryServices, rgi)
 					}
 				}
+				b.initMestricCountCallAction()
 				logInfo("Receive info from `" + topicInfoData.Sender.NodeId + "`")
 			}
 		}
 	}()
 }
 
-func broadcastGlobal(rdb *redis.Client) {
+func (b *Broker) broadcastGlobal(rdb *redis.Client) {
 	// publish discovery
 	go func() {
 		var ctx = context.Background()
 		info, _ := SerializerJson(TopicDiscoveryData{
-			Sender: registryNode,
+			Sender: b.registryNode,
 		})
 		err := rdb.Publish(ctx, channelGlobalDiscovery, info).Err()
 		if err != nil {
@@ -366,8 +361,8 @@ func broadcastGlobal(rdb *redis.Client) {
 	go func() {
 		var ctx = context.Background()
 		info, _ := SerializerJson(TopicInfoData{
-			Sender:   registryNode,
-			Services: registryServices,
+			Sender:   b.registryNode,
+			Services: b.registryServices,
 		})
 		err := rdb.Publish(ctx, channelGlobalInfo, info).Err()
 		if err != nil {
@@ -377,11 +372,11 @@ func broadcastGlobal(rdb *redis.Client) {
 	// heartbeat
 	go func() {
 		for {
-			time.Sleep(time.Millisecond * time.Duration(broker.Config.DiscoveryConfig.HeartbeatInterval))
+			time.Sleep(time.Millisecond * time.Duration(b.Config.DiscoveryConfig.HeartbeatInterval))
 
 			var ctx = context.Background()
 			info, _ := SerializerJson(TopicHeartbeatData{
-				Sender: registryNode,
+				Sender: b.registryNode,
 			})
 			err := rdb.Publish(ctx, channelGlobalHeartBeat, info).Err()
 			if err != nil {
@@ -391,15 +386,15 @@ func broadcastGlobal(rdb *redis.Client) {
 	}()
 }
 
-func clearNodeTimeout() {
+func (b *Broker) clearNodeTimeout() {
 	go func() {
 		for {
 			time.Sleep(time.Second * 2)
 			now := time.Now().UnixMilli()
 			var tempNodes []RegistryNode
 			checkNodeTimeOut := false
-			for _, n := range registryNodes {
-				if now-int64(n.LastActive) <= int64(broker.Config.DiscoveryConfig.CleanOfflineNodesTimeout) {
+			for _, n := range b.registryNodes {
+				if now-int64(n.LastActive) <= int64(b.Config.DiscoveryConfig.CleanOfflineNodesTimeout) {
 					tempNodes = append(tempNodes, n)
 				} else {
 					checkNodeTimeOut = true
@@ -407,27 +402,27 @@ func clearNodeTimeout() {
 				}
 			}
 			if checkNodeTimeOut {
-				registryNodes = tempNodes
+				b.registryNodes = tempNodes
 				var tempServices []RegistryService
-				for _, s := range registryServices {
+				for _, s := range b.registryServices {
 					check := false
-					for _, n := range registryNodes {
+					for _, n := range b.registryNodes {
 						if n.NodeId == s.Node.NodeId {
 							check = true
 						}
 					}
-					if check || s.Node.NodeId == broker.Config.NodeId {
+					if check || s.Node.NodeId == b.Config.NodeId {
 						tempServices = append(tempServices, s)
 					}
 				}
-				registryServices = tempServices
+				b.registryServices = tempServices
 			}
 		}
 	}()
 }
 
 // Get preferred outbound ip of this machine
-func getOutboundIP() (net.IP, error) {
+func (b *Broker) getOutboundIP() (net.IP, error) {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
 		return nil, err

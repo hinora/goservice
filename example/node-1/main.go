@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	goservice.Init(goservice.BrokerConfig{
+	b := goservice.Init(goservice.BrokerConfig{
 		NodeId: "Node-1",
 		DiscoveryConfig: goservice.DiscoveryConfig{
 			DiscoveryType: goservice.DiscoveryTypeRedis,
@@ -33,7 +33,7 @@ func main() {
 			TraceExpoter: goservice.TraceExporterConsole,
 		},
 	})
-	goservice.LoadService(goservice.Service{
+	b.LoadService(goservice.Service{
 		Name: "math",
 		Actions: []goservice.Action{
 			{
@@ -56,5 +56,5 @@ func main() {
 			// fmt.Println("Response from say hi: ", data2, err2)
 		},
 	})
-	goservice.Hold()
+	b.Hold()
 }

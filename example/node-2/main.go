@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/hinora/goservice"
 )
 
 func main() {
-	goservice.Init(goservice.BrokerConfig{
+	b := goservice.Init(goservice.BrokerConfig{
 		NodeId: "Node-2",
 		DiscoveryConfig: goservice.DiscoveryConfig{
 			DiscoveryType: goservice.DiscoveryTypeRedis,
@@ -33,7 +34,7 @@ func main() {
 		},
 	})
 
-	goservice.LoadService(goservice.Service{
+	b.LoadService(goservice.Service{
 		Name: "hello",
 		Actions: []goservice.Action{
 			{
@@ -41,23 +42,24 @@ func main() {
 				Params: map[string]interface{}{},
 				Handle: func(ctx *goservice.Context) (interface{}, error) {
 					fmt.Println("Handle action say hi from node 2")
-					// var wg sync.WaitGroup
-					// wg.Add(1)
-					// go func() {
-					// 	defer wg.Done()
-					data, err := ctx.Call("math.plus", nil, nil)
-					fmt.Println("Response from math.plus: ", data, err)
-					// }()
-					// go func() {
-					// 	defer wg.Done()
-					data1, err1 := ctx.Call("math.plus", nil, nil)
-					fmt.Println("Response from math.plus: ", data1, err1)
-					// }()
-					// wg.Wait()
+					var wg sync.WaitGroup
+					wg.Add(1)
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						data, err := ctx.Call("math.plus", nil, nil)
+						fmt.Println("Response from math.plus: ", data, err)
+					}()
+					go func() {
+						defer wg.Done()
+						data1, err1 := ctx.Call("math.plus", nil, nil)
+						fmt.Println("Response from math.plus: ", data1, err1)
+					}()
+					wg.Wait()
 					return "This is result from action say hi", nil
 				},
 			},
 		},
 	})
-	goservice.Hold()
+	b.Hold()
 }

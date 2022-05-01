@@ -19,30 +19,36 @@ type BrokerConfig struct {
 }
 
 type Broker struct {
-	Config   BrokerConfig
-	Services []*Service
-	Started  func(*Context)
-	Stoped   func(*Context)
+	Config             BrokerConfig
+	Services           []*Service
+	Started            func(*Context)
+	Stoped             func(*Context)
+	transporter        Transporter
+	bus                EventBus
+	traceSpans         map[string]*traceSpan
+	channelPrivateInfo string
+	registryServices   []RegistryService
+	registryNodes      []RegistryNode
+	registryNode       RegistryNode
+	debouncedEmitInfo  func(f func())
+	trace              Trace
 }
 
-var broker Broker
-
-var debouncedEmitInfo func(f func())
-
-func Init(config BrokerConfig) {
+func Init(config BrokerConfig) *Broker {
 	initMetrics()
-	broker = Broker{
+	broker := Broker{
 		Config: config,
 	}
-	initDiscovery()
-	initTransporter()
-	initTrace()
-	debouncedEmitInfo = debounce.New(1000 * time.Millisecond)
+	broker.initDiscovery()
+	broker.initTransporter()
+	broker.initTrace()
+	broker.debouncedEmitInfo = debounce.New(1000 * time.Millisecond)
+	return &broker
 }
 
-func LoadService(service Service) {
+func (b *Broker) LoadService(service Service) {
 
-	broker.Services = append(broker.Services, &service)
+	b.Services = append(b.Services, &service)
 
 	// add service to registry
 	var registryActions []RegistryAction
@@ -59,15 +65,15 @@ func LoadService(service Service) {
 			Params: e.Params,
 		})
 	}
-	registryServices = append(registryServices, RegistryService{
-		Node:    registryNode,
+	b.registryServices = append(b.registryServices, RegistryService{
+		Node:    b.registryNode,
 		Name:    service.Name,
 		Actions: registryActions,
 		Events:  registryEvents,
 	})
 
 	// emit info service
-	debouncedEmitInfo(startDiscovery)
+	b.debouncedEmitInfo(b.startDiscovery)
 	// handle logic service
 
 	// service lifecycle
@@ -75,7 +81,7 @@ func LoadService(service Service) {
 	if service.Started != nil {
 		go func() {
 			//trace
-			spanId := startTraceSpan("Service `"+service.Name+"` started", "action", "", "", map[string]interface{}{}, "", "", 1)
+			spanId := b.startTraceSpan("Service `"+service.Name+"` started", "action", "", "", map[string]interface{}{}, "", "", 1)
 			// started
 
 			context := Context{
@@ -83,7 +89,7 @@ func LoadService(service Service) {
 				Params:            map[string]interface{}{},
 				Meta:              map[string]interface{}{},
 				FromService:       "",
-				FromNode:          broker.Config.NodeId,
+				FromNode:          b.Config.NodeId,
 				CallingLevel:      1,
 				TraceParentId:     spanId,
 				TraceParentRootId: spanId,
@@ -94,33 +100,33 @@ func LoadService(service Service) {
 					ResponseId:        uuid.New().String(),
 					Params:            params,
 					Meta:              meta,
-					FromNode:          broker.Config.NodeId,
+					FromNode:          b.Config.NodeId,
 					FromService:       service.Name,
 					FromAction:        "",
 					CallingLevel:      1,
 					TraceParentId:     spanId,
 					TraceParentRootId: spanId,
 				}
-				callResult, err := callAction(ctxCall, action, params, meta, service.Name, "")
-				addTraceSpans(callResult.TraceSpans)
+				callResult, err := b.callAction(ctxCall, action, params, meta, service.Name, "")
+				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
 				}
 				return callResult.Data, err
 			}
 			service.Started(&context)
-			endTraceSpan(spanId, nil)
+			b.endTraceSpan(spanId, nil)
 		}()
 	}
 
 	// actions handle
 	for _, a := range service.Actions {
-		go listenActionCall(service.Name, a)
+		go b.listenActionCall(service.Name, a)
 	}
 
 	// events handle
 }
 
-func Hold() {
+func (b *Broker) Hold() {
 	select {}
 }

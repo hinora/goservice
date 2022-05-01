@@ -70,36 +70,33 @@ type Transporter struct {
 	Receive   func(func(string, interface{}, error), interface{})
 }
 
-var transporter Transporter
-var bus EventBus
-
-func initTransporter() {
-	bus = EventBus{}
-	transporter = Transporter{
-		Config: broker.Config.TransporterConfig,
+func (b *Broker) initTransporter() {
+	b.bus = EventBus{}
+	b.transporter = Transporter{
+		Config: b.Config.TransporterConfig,
 	}
 
-	switch transporter.Config.TransporterType {
+	switch b.transporter.Config.TransporterType {
 	case TransporterTypeRedis:
-		initRedisTransporter()
+		b.initRedisTransporter()
 		break
 	}
 }
 
-func initRedisTransporter() {
+func (b *Broker) initRedisTransporter() {
 	// redis transporter
 	var ctx = context.Background()
-	config := broker.Config.TransporterConfig.Config.(TransporterRedisConfig)
+	config := b.Config.TransporterConfig.Config.(TransporterRedisConfig)
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     config.Host + ":" + strconv.Itoa(config.Port),
 		Password: config.Password,
 		DB:       config.Db,
 	})
-	transporter.Subscribe = func(channel string) interface{} {
+	b.transporter.Subscribe = func(channel string) interface{} {
 		pubsub := rdb.Subscribe(ctx, channel)
 		return pubsub
 	}
-	transporter.Emit = func(channel string, data interface{}) error {
+	b.transporter.Emit = func(channel string, data interface{}) error {
 		data, err := SerializerJson(data)
 		if err != nil {
 			return err
@@ -111,7 +108,7 @@ func initRedisTransporter() {
 
 		return nil
 	}
-	transporter.Receive = func(callBack func(string, interface{}, error), pubsub interface{}) {
+	b.transporter.Receive = func(callBack func(string, interface{}, error), pubsub interface{}) {
 		ps := pubsub.(*redis.PubSub)
 		for {
 			msg, err := ps.ReceiveMessage(ctx)
@@ -129,10 +126,10 @@ func initRedisTransporter() {
 	}
 
 	// subscribe channel request
-	channelRequestTransporter := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".request"
-	pbRq := transporter.Subscribe(channelRequestTransporter)
+	channelRequestTransporter := GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".request"
+	pbRq := b.transporter.Subscribe(channelRequestTransporter)
 	pubsubRq := pbRq.(*redis.PubSub)
-	go transporter.Receive(func(cn string, data interface{}, err error) {
+	go b.transporter.Receive(func(cn string, data interface{}, err error) {
 		go func() {
 			if err != nil {
 				return
@@ -143,9 +140,9 @@ func initRedisTransporter() {
 
 			dT.ResponseId = uuid.New().String()
 			// Subscribe response data
-			channelCall := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + dT.CallToService + "." + dT.CallToAction
-			channelReceive := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + dT.ResponseId
-			res, e := emitWithTimeout(channelCall, channelReceive, dT)
+			channelCall := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + dT.CallToService + "." + dT.CallToAction
+			channelReceive := GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response." + dT.ResponseId
+			res, e := b.emitWithTimeout(channelCall, channelReceive, dT)
 			if e != nil {
 				return
 			}
@@ -155,31 +152,31 @@ func initRedisTransporter() {
 			mapstructure.Decode(res, &resT)
 
 			resT.ResponseId = responseId
-			transporter.Emit(channelResponseTransporter, resT)
+			b.transporter.Emit(channelResponseTransporter, resT)
 		}()
 	}, pubsubRq)
 
 	// subceibe channel response
-	channelResponseTransporter := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response"
-	pbRs := transporter.Subscribe(channelResponseTransporter)
+	channelResponseTransporter := GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response"
+	pbRs := b.transporter.Subscribe(channelResponseTransporter)
 	pubsubRs := pbRs.(*redis.PubSub)
-	go transporter.Receive(func(cn string, data interface{}, err error) {
+	go b.transporter.Receive(func(cn string, data interface{}, err error) {
 		go func() {
 			if err != nil {
 				return
 			}
 			dRs := ResponseTranferData{}
 			mapstructure.Decode(data, &dRs)
-			channelResponseTransporter := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + dRs.ResponseId
-			bus.Publish(channelResponseTransporter, dRs)
+			channelResponseTransporter := GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response." + dRs.ResponseId
+			b.bus.Publish(channelResponseTransporter, dRs)
 		}()
 	}, pubsubRs)
 
 }
 
-func listenActionCall(serviceName string, action Action) {
-	channel := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + serviceName + "." + action.Name
-	bus.Subscribe(channel, func(data RequestTranferData) {
+func (b *Broker) listenActionCall(serviceName string, action Action) {
+	channel := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + serviceName + "." + action.Name
+	b.bus.Subscribe(channel, func(data RequestTranferData) {
 		go func() {
 
 			responseId := data.ResponseId
@@ -197,7 +194,7 @@ func listenActionCall(serviceName string, action Action) {
 			}
 
 			// start trace
-			spanId := startTraceSpan("Action `"+serviceName+"."+action.Name+"`", "action", serviceName, action.Name, data.Params, ctx.FromNode, ctx.TraceParentId, ctx.CallingLevel, data.TraceRootParentId)
+			spanId := b.startTraceSpan("Action `"+serviceName+"."+action.Name+"`", "action", serviceName, action.Name, data.Params, ctx.FromNode, ctx.TraceParentId, ctx.CallingLevel, data.TraceRootParentId)
 
 			ctx.TraceParentId = spanId
 			ctx.Call = func(a string, params interface{}, meta interface{}) (interface{}, error) {
@@ -206,15 +203,15 @@ func listenActionCall(serviceName string, action Action) {
 					ResponseId:        uuid.New().String(),
 					Params:            params,
 					Meta:              meta,
-					FromNode:          broker.Config.NodeId,
+					FromNode:          b.Config.NodeId,
 					FromService:       serviceName,
 					FromAction:        action.Name,
 					CallingLevel:      data.CallingLevel,
 					TraceParentId:     spanId,
 					TraceParentRootId: data.TraceRootParentId,
 				}
-				callResult, err := callAction(ctxCall, a, params, meta, serviceName, action.Name)
-				addTraceSpans(callResult.TraceSpans)
+				callResult, err := b.callAction(ctxCall, a, params, meta, serviceName, action.Name)
+				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
 				}
@@ -225,23 +222,23 @@ func listenActionCall(serviceName string, action Action) {
 			res, e := action.Handle(&ctx)
 
 			// end trace
-			endTraceSpan(spanId, e)
+			b.endTraceSpan(spanId, e)
 
 			// response result
 			responseTranferData := ResponseTranferData{
 				ResponseId:      responseId,
-				ResponseNodeId:  broker.Config.NodeId,
+				ResponseNodeId:  b.Config.NodeId,
 				ResponseService: serviceName,
 				ResponseAction:  action.Name,
 				ResponseTime:    time.Now().UnixNano(),
 			}
 
 			// response trace if the exporter is console
-			if broker.Config.TraceConfig.TraceExpoter == TraceExporterConsole {
-				trans, errFind := findSpan(spanId)
+			if b.Config.TraceConfig.TraceExpoter == TraceExporterConsole {
+				trans, errFind := b.findSpan(spanId)
 				if errFind == nil {
 					responseTranferData.TraceSpans = append(responseTranferData.TraceSpans, *trans)
-					traceSpans := findTraceChildrensDeep(trans.TraceId)
+					traceSpans := b.findTraceChildrensDeep(trans.TraceId)
 					for _, s := range traceSpans {
 						// if s.Tags.CallerNodeId != data.CallerNodeId {
 						responseTranferData.TraceSpans = append(responseTranferData.TraceSpans, *s)
@@ -259,20 +256,20 @@ func listenActionCall(serviceName string, action Action) {
 				responseTranferData.Data = res
 			}
 
-			responseChanel := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + responseId
-			bus.Publish(responseChanel, responseTranferData)
+			responseChanel := GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response." + responseId
+			b.bus.Publish(responseChanel, responseTranferData)
 		}()
 	})
 }
 
 // calling
-func callAction(ctx Context, actionName string, params interface{}, meta interface{}, callerService string, callerAction string) (ResponseTranferData, error) {
+func (b *Broker) callAction(ctx Context, actionName string, params interface{}, meta interface{}, callerService string, callerAction string) (ResponseTranferData, error) {
 	data := make(chan ResponseTranferData, 1)
 	var err error
 	channelInternal := ""
 
 	// chose node call
-	service, action := balancingRoundRobin(actionName)
+	service, action := b.balancingRoundRobin(actionName)
 	if service.Name == "" && action.Name == "" {
 		return ResponseTranferData{}, errors.New("Action or event `" + actionName + "` is not existed")
 	}
@@ -281,13 +278,13 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 		// Init data send
 		channelTransporter := GO_SERVICE_PREFIX + "." + service.Node.NodeId + ".request"
 		responseId := uuid.New().String()
-		channelInternal = GO_SERVICE_PREFIX + "." + broker.Config.NodeId + ".response." + responseId
+		channelInternal = GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response." + responseId
 		dataSend := RequestTranferData{
 			Params:            params,
 			Meta:              meta,
 			RequestId:         ctx.RequestId,
 			ResponseId:        responseId,
-			CallerNodeId:      broker.Config.NodeId,
+			CallerNodeId:      b.Config.NodeId,
 			CallerService:     callerService,
 			CallerAction:      callerAction,
 			CallingLevel:      ctx.CallingLevel + 1,
@@ -298,17 +295,17 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 			TraceRootParentId: ctx.TraceParentRootId,
 		}
 		// Subscribe response data
-		bus.Subscribe(channelInternal, func(d interface{}) {
+		b.bus.Subscribe(channelInternal, func(d interface{}) {
 			go func() {
 				dT := ResponseTranferData{}
 				mapstructure.Decode(d, &dT)
 				data <- dT
-				bus.UnSubscribe(channelInternal)
+				b.bus.UnSubscribe(channelInternal)
 			}()
 		})
 
 		// push transporter
-		transporter.Emit(channelTransporter, dataSend)
+		b.transporter.Emit(channelTransporter, dataSend)
 
 		// Service in local? Use internal event bus
 		// channelCall := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + dT.CallToService + "." + dT.CallToAction
@@ -322,34 +319,34 @@ func callAction(ctx Context, actionName string, params interface{}, meta interfa
 			return ResponseTranferData{}, err
 		}
 		// fmt.Println("Traces response: ", res.TraceSpans)
-		addTraceSpans(res.TraceSpans)
+		b.addTraceSpans(res.TraceSpans)
 		return res, nil
-	case <-time.After(time.Duration(broker.Config.RequestTimeOut) * time.Millisecond):
+	case <-time.After(time.Duration(b.Config.RequestTimeOut) * time.Millisecond):
 		if channelInternal != "" {
-			bus.UnSubscribe(channelInternal)
+			b.bus.UnSubscribe(channelInternal)
 		}
 		err := errors.New("Timeout")
 		return ResponseTranferData{}, err
 	}
 }
 
-func emitWithTimeout(channelCall string, channelReceive string, dataSend interface{}) (interface{}, error) {
+func (b *Broker) emitWithTimeout(channelCall string, channelReceive string, dataSend interface{}) (interface{}, error) {
 	data := make(chan interface{}, 1)
 	go func() {
 
 		// Subscribe response data
-		bus.Subscribe(channelReceive, func(d interface{}) {
+		b.bus.Subscribe(channelReceive, func(d interface{}) {
 			data <- d
-			bus.UnSubscribe(channelReceive)
+			b.bus.UnSubscribe(channelReceive)
 		})
 
-		bus.Publish(channelCall, dataSend)
+		b.bus.Publish(channelCall, dataSend)
 	}()
 	select {
 	case res := <-data:
 		return res, nil
-	case <-time.After(time.Duration(broker.Config.RequestTimeOut) * time.Millisecond):
-		bus.UnSubscribe(channelReceive)
+	case <-time.After(time.Duration(b.Config.RequestTimeOut) * time.Millisecond):
+		b.bus.UnSubscribe(channelReceive)
 		return nil, errors.New("Timeout")
 	}
 }

@@ -48,51 +48,47 @@ type Trace struct {
 	Exporter interface{}
 }
 
-var trace Trace
-
 const (
 	TraceExporterConsole TraceExpoter = iota + 1
 	TraceExporterDDDog
 )
 
-var traceSpans map[string]*traceSpan
-
-func initTrace() {
-	traceSpans = map[string]*traceSpan{}
-	if !broker.Config.TraceConfig.Enabled {
+func (b *Broker) initTrace() {
+	b.traceSpans = map[string]*traceSpan{}
+	if !b.Config.TraceConfig.Enabled {
 		return
 	}
-	switch broker.Config.TraceConfig.TraceExpoter {
+	switch b.Config.TraceConfig.TraceExpoter {
 	case TraceExporterConsole:
-		trace = Trace{
+		b.trace = Trace{
 			Exporter: initTraceConsole(),
 		}
 	}
 }
 
-func addTraceSpan(span *traceSpan) string {
-	if !broker.Config.TraceConfig.Enabled {
+func (b *Broker) addTraceSpan(span *traceSpan) string {
+	if !b.Config.TraceConfig.Enabled {
 		return ""
 	}
-	traceSpans[span.TraceId] = span
+	b.traceSpans[span.TraceId] = span
 	return span.TraceId
 }
-func addTraceSpans(spans []traceSpan) {
-	if !broker.Config.TraceConfig.Enabled {
+func (b *Broker) addTraceSpans(spans []traceSpan) {
+	if !b.Config.TraceConfig.Enabled {
 		return
 	}
 	for i := 0; i < len(spans); i++ {
-		traceSpans[spans[i].TraceId] = &spans[i]
+		b.traceSpans[spans[i].TraceId] = &spans[i]
 	}
 }
 
-func startTraceSpan(name string, types string, service string, action string, params interface{}, callerNodeId string, parentId string, callingLevel int, requestId ...string) string {
-	if !broker.Config.TraceConfig.Enabled {
+func (b *Broker) startTraceSpan(name string, types string, service string, action string, params interface{}, callerNodeId string, parentId string, callingLevel int, requestId ...string) string {
+	if !b.Config.TraceConfig.Enabled {
 		return ""
 	}
 	id := uuid.New().String()
 	remoteCall := false
-	if callerNodeId != "" && broker.Config.NodeId != callerNodeId {
+	if callerNodeId != "" && b.Config.NodeId != callerNodeId {
 		remoteCall = true
 	}
 	reqId := id
@@ -113,21 +109,21 @@ func startTraceSpan(name string, types string, service string, action string, pa
 			Action:       action,
 			RemoteCall:   remoteCall,
 			CallerNodeId: callerNodeId,
-			NodeId:       broker.Config.NodeId,
+			NodeId:       b.Config.NodeId,
 			RequestId:    reqId,
 			Params:       params,
 			FromCache:    false,
 		},
 	}
-	addTraceSpan(&trace)
+	b.addTraceSpan(&trace)
 	return id
 }
 
-func endTraceSpan(spanId string, err error) {
-	if !broker.Config.TraceConfig.Enabled {
+func (b *Broker) endTraceSpan(spanId string, err error) {
+	if !b.Config.TraceConfig.Enabled {
 		return
 	}
-	span, e := findSpan(spanId)
+	span, e := b.findSpan(spanId)
 	if e != nil {
 		return
 	}
@@ -137,53 +133,53 @@ func endTraceSpan(spanId string, err error) {
 		span.Error = err
 	}
 
-	switch broker.Config.TraceConfig.TraceExpoter {
+	switch b.Config.TraceConfig.TraceExpoter {
 	case TraceExporterConsole:
 		if span.TraceId == span.Tags.RequestId {
-			spanChild := findTraceChildrens(span.Tags.RequestId)
-			ex := trace.Exporter.(*traceConsole)
+			spanChild := b.findTraceChildrens(span.Tags.RequestId)
+			ex := b.trace.Exporter.(*traceConsole)
 			ex.ExportSpan(spanChild)
 		}
 	}
 }
-func findSpan(spanId string) (*traceSpan, error) {
-	if value, ok := traceSpans[spanId]; ok {
+func (b *Broker) findSpan(spanId string) (*traceSpan, error) {
+	if value, ok := b.traceSpans[spanId]; ok {
 		return value, nil
 	}
 	return &traceSpan{}, errors.New("Span not exist")
 }
 
-func findTraceChildrens(requestID string) []*traceSpan {
+func (b *Broker) findTraceChildrens(requestID string) []*traceSpan {
 	traces := []*traceSpan{}
-	for k, v := range traceSpans {
+	for k, v := range b.traceSpans {
 		if v.Tags.RequestId == requestID {
-			traces = append(traces, traceSpans[k])
+			traces = append(traces, b.traceSpans[k])
 		}
 	}
 	return traces
 }
-func findTraceChildrensDeep(spanId string) []*traceSpan {
+func (b *Broker) findTraceChildrensDeep(spanId string) []*traceSpan {
 	traces := []*traceSpan{}
-	for _, v := range traceSpans {
+	for _, v := range b.traceSpans {
 		if v.ParentId == spanId {
 			traces = append(traces, v)
 		}
 	}
 	if len(traces) != 0 {
 		for _, t := range traces {
-			traces = append(traces, findTraceChildrensDeep(t.TraceId)...)
+			traces = append(traces, b.findTraceChildrensDeep(t.TraceId)...)
 		}
 	}
 	return traces
 }
 
-func removeSpan(spanId string) {
-	delete(traceSpans, spanId)
+func (b *Broker) removeSpan(spanId string) {
+	delete(b.traceSpans, spanId)
 }
-func removeSpanByParent(parentId string) {
-	for _, v := range traceSpans {
+func (b *Broker) removeSpanByParent(parentId string) {
+	for _, v := range b.traceSpans {
 		if v.ParentId == parentId {
-			delete(traceSpans, v.TraceId)
+			delete(b.traceSpans, v.TraceId)
 		}
 	}
 }
