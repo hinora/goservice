@@ -46,12 +46,21 @@ func main() {
 				},
 			},
 		},
+		Events: []goservice.Event{
+			{
+				Name: "event.test",
+				Handle: func(context *goservice.Context) {
+					fmt.Println("Handle event test from node 1")
+				},
+			},
+		},
 		Started: func(ctx *goservice.Context) {
 			time.Sleep(time.Millisecond * 5000)
 			fmt.Println("service test started")
 
 			data, err := ctx.Call("hello.say_hi", nil, nil)
 			fmt.Println("Response from say hi: ", data, err)
+			fmt.Println(ctx.Call("event.test", nil, nil))
 			// data2, err2 := ctx.Call("hello.say_hi", nil, nil)
 			// fmt.Println("Response from say hi: ", data2, err2)
 		},

@@ -6,9 +6,10 @@ import (
 	"github.com/zserge/metric"
 )
 
-func (b *Broker) balancingRoundRobin(name string) (RegistryService, RegistryAction) {
+func (b *Broker) balancingRoundRobin(name string) (RegistryService, RegistryAction, []RegistryService) {
 	var rs RegistryService
 	var ra RegistryAction
+	var re []RegistryService
 	var minCall float64 = 0
 	var actions []RegistryAction
 	var services []RegistryService
@@ -17,6 +18,11 @@ func (b *Broker) balancingRoundRobin(name string) (RegistryService, RegistryActi
 			if name == s.Name+"."+a.Name {
 				actions = append(actions, a)
 				services = append(services, s)
+			}
+		}
+		for _, e := range s.Events {
+			if name == e.Name {
+				re = append(re, s)
 			}
 		}
 	}
@@ -36,10 +42,21 @@ func (b *Broker) balancingRoundRobin(name string) (RegistryService, RegistryActi
 				rs = services[i]
 			}
 		}
+		if rs.Name != "" && ra.Name != "" {
+			nameCheck := MCountCall + "." + rs.Node.NodeId + "." + rs.Name + "." + ra.Name
+			expvar.Get(nameCheck).(metric.Metric).Add(1)
+		}
+	} else if len(re) != 0 {
+		for i := 0; i < len(re); i++ {
+			re[i].Actions = []RegistryAction{}
+			var events []RegistryEvent
+			for _, e := range re[i].Events {
+				if e.Name == name {
+					events = append(events, e)
+				}
+			}
+			re[i].Events = events
+		}
 	}
-	if rs.Name != "" && ra.Name != "" {
-		nameCheck := MCountCall + "." + rs.Node.NodeId + "." + rs.Name + "." + ra.Name
-		expvar.Get(nameCheck).(metric.Metric).Add(1)
-	}
-	return rs, ra
+	return rs, ra, re
 }

@@ -107,7 +107,7 @@ func (b *Broker) LoadService(service Service) {
 					TraceParentId:     spanId,
 					TraceParentRootId: spanId,
 				}
-				callResult, err := b.callAction(ctxCall, action, params, meta, service.Name, "")
+				callResult, err := b.callActionOrEvent(ctxCall, action, params, meta, service.Name, "", "")
 				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
@@ -125,6 +125,9 @@ func (b *Broker) LoadService(service Service) {
 	}
 
 	// events handle
+	for _, e := range service.Events {
+		go b.listenEventCall(service.Name, e)
+	}
 }
 
 func (b *Broker) Hold() {

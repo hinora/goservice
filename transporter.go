@@ -46,10 +46,12 @@ type RequestTranferData struct {
 	CallerNodeId      string      `json:"caller_node_id" mapstructure:"caller_node_id"`
 	CallerService     string      `json:"caller_service" mapstructure:"caller_service"`
 	CallerAction      string      `json:"caller_action" mapstructure:"caller_action"`
+	CallerEvent       string      `json:"caller_event" mapstructure:"caller_event"`
 	CallingLevel      int         `json:"calling_level" mapstructure:"calling_level"`
 	CalledTime        int64       `json:"called_time" mapstructure:"called_time"`
 	CallToService     string      `json:"call_to_service" mapstructure:"call_to_service"`
 	CallToAction      string      `json:"call_to_action" mapstructure:"call_to_action"`
+	CallToEvent       string      `json:"call_to_event" mapstructure:"call_to_event"`
 }
 
 type ResponseTranferData struct {
@@ -137,22 +139,28 @@ func (b *Broker) initRedisTransporter() {
 			dT := RequestTranferData{}
 			mapstructure.Decode(data, &dT)
 			responseId := dT.ResponseId
+			if dT.CallToAction != "" {
 
-			dT.ResponseId = uuid.New().String()
-			// Subscribe response data
-			channelCall := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + dT.CallToService + "." + dT.CallToAction
-			channelReceive := GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response." + dT.ResponseId
-			res, e := b.emitWithTimeout(channelCall, channelReceive, dT)
-			if e != nil {
-				return
+				dT.ResponseId = uuid.New().String()
+				// Subscribe response data
+				channelCall := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + dT.CallToService + "." + dT.CallToAction
+				channelReceive := GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response." + dT.ResponseId
+				res, e := b.emitWithTimeout(channelCall, channelReceive, dT)
+				if e != nil {
+					return
+				}
+
+				channelResponseTransporter := GO_SERVICE_PREFIX + "." + dT.CallerNodeId + ".response"
+				resT := ResponseTranferData{}
+				mapstructure.Decode(res, &resT)
+
+				resT.ResponseId = responseId
+				b.transporter.Emit(channelResponseTransporter, resT)
+			} else if dT.CallToEvent != "" {
+
+				channelCall := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + dT.CallToService + "." + dT.CallToEvent
+				b.emitWithTimeout(channelCall, "", dT)
 			}
-
-			channelResponseTransporter := GO_SERVICE_PREFIX + "." + dT.CallerNodeId + ".response"
-			resT := ResponseTranferData{}
-			mapstructure.Decode(res, &resT)
-
-			resT.ResponseId = responseId
-			b.transporter.Emit(channelResponseTransporter, resT)
 		}()
 	}, pubsubRq)
 
@@ -187,6 +195,7 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 				Meta:              data.Meta,
 				FromNode:          data.CallerNodeId,
 				FromService:       data.CallerService,
+				FromEvent:         data.CallToEvent,
 				FromAction:        data.CallerAction,
 				CallingLevel:      data.CallingLevel,
 				TraceParentId:     data.TraceParentId,
@@ -210,7 +219,7 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 					TraceParentId:     spanId,
 					TraceParentRootId: data.TraceRootParentId,
 				}
-				callResult, err := b.callAction(ctxCall, a, params, meta, serviceName, action.Name)
+				callResult, err := b.callActionOrEvent(ctxCall, a, params, meta, serviceName, action.Name, "")
 				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
@@ -261,19 +270,98 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 		}()
 	})
 }
+func (b *Broker) listenEventCall(serviceName string, event Event) {
+	channel := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + serviceName + "." + event.Name
+	b.bus.Subscribe(channel, func(data RequestTranferData) {
+		go func() {
+			ctx := Context{
+				RequestId:         uuid.New().String(),
+				ResponseId:        uuid.New().String(),
+				Params:            data.Params,
+				Meta:              data.Meta,
+				FromNode:          data.CallerNodeId,
+				FromService:       data.CallerService,
+				FromEvent:         data.CallToEvent,
+				FromAction:        data.CallerAction,
+				CallingLevel:      data.CallingLevel,
+				TraceParentId:     data.TraceParentId,
+				TraceParentRootId: data.TraceRootParentId,
+			}
+
+			// start trace
+			spanId := b.startTraceSpan("Event `"+event.Name+"`", "action", serviceName, event.Name, data.Params, ctx.FromNode, ctx.TraceParentId, ctx.CallingLevel, data.TraceRootParentId)
+
+			ctx.TraceParentId = spanId
+			ctx.Call = func(a string, params interface{}, meta interface{}) (interface{}, error) {
+				ctxCall := Context{
+					RequestId:         uuid.New().String(),
+					ResponseId:        uuid.New().String(),
+					Params:            params,
+					Meta:              meta,
+					FromNode:          b.Config.NodeId,
+					FromService:       serviceName,
+					FromEvent:         event.Name,
+					CallingLevel:      data.CallingLevel,
+					TraceParentId:     spanId,
+					TraceParentRootId: data.TraceRootParentId,
+				}
+				callResult, err := b.callActionOrEvent(ctxCall, a, params, meta, serviceName, "", event.Name)
+				b.addTraceSpans(callResult.TraceSpans)
+				if err != nil {
+					return nil, err
+				}
+				return callResult.Data, err
+			}
+
+			// handle action
+			event.Handle(&ctx)
+
+			// end trace
+			b.endTraceSpan(spanId, nil)
+		}()
+	})
+}
 
 // calling
-func (b *Broker) callAction(ctx Context, actionName string, params interface{}, meta interface{}, callerService string, callerAction string) (ResponseTranferData, error) {
-	data := make(chan ResponseTranferData, 1)
-	var err error
-	channelInternal := ""
-
+func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interface{}, meta interface{}, callerService string, callerAction string, callerEvent string) (ResponseTranferData, error) {
 	// chose node call
-	service, action := b.balancingRoundRobin(actionName)
-	if service.Name == "" && action.Name == "" {
+	service, action, events := b.balancingRoundRobin(actionName)
+	if service.Name == "" && action.Name == "" && len(events) == 0 {
 		return ResponseTranferData{}, errors.New("Action or event `" + actionName + "` is not existed")
 	}
-
+	// call event
+	if len(events) != 0 {
+		for i := 0; i < len(events); i++ {
+			for j := 0; j < len(events[i].Events); j++ {
+				// Init data send
+				channelTransporter := GO_SERVICE_PREFIX + "." + events[i].Node.NodeId + ".request"
+				responseId := uuid.New().String()
+				dataSend := RequestTranferData{
+					Params:            params,
+					Meta:              meta,
+					RequestId:         ctx.RequestId,
+					ResponseId:        responseId,
+					CallerNodeId:      b.Config.NodeId,
+					CallerService:     callerService,
+					CallerAction:      callerAction,
+					CallerEvent:       callerEvent,
+					CallingLevel:      ctx.CallingLevel + 1,
+					CalledTime:        time.Now().UnixNano(),
+					CallToService:     events[i].Name,
+					CallToEvent:       events[i].Events[j].Name,
+					TraceParentId:     ctx.TraceParentId,
+					TraceRootParentId: ctx.TraceParentRootId,
+				}
+				// push transporter
+				b.transporter.Emit(channelTransporter, dataSend)
+			}
+		}
+		return ResponseTranferData{}, nil
+	}
+	channelInternal := ""
+	data := make(chan ResponseTranferData, 1)
+	var err error
+	// call action
 	go func() {
 		// Init data send
 		channelTransporter := GO_SERVICE_PREFIX + "." + service.Node.NodeId + ".request"
@@ -287,6 +375,7 @@ func (b *Broker) callAction(ctx Context, actionName string, params interface{}, 
 			CallerNodeId:      b.Config.NodeId,
 			CallerService:     callerService,
 			CallerAction:      callerAction,
+			CallerEvent:       callerEvent,
 			CallingLevel:      ctx.CallingLevel + 1,
 			CalledTime:        time.Now().UnixNano(),
 			CallToService:     service.Name,
@@ -331,22 +420,27 @@ func (b *Broker) callAction(ctx Context, actionName string, params interface{}, 
 }
 
 func (b *Broker) emitWithTimeout(channelCall string, channelReceive string, dataSend interface{}) (interface{}, error) {
-	data := make(chan interface{}, 1)
-	go func() {
+	if channelReceive != "" {
+		data := make(chan interface{}, 1)
+		go func() {
 
-		// Subscribe response data
-		b.bus.Subscribe(channelReceive, func(d interface{}) {
-			data <- d
+			// Subscribe response data
+			b.bus.Subscribe(channelReceive, func(d interface{}) {
+				data <- d
+				b.bus.UnSubscribe(channelReceive)
+			})
+
+			b.bus.Publish(channelCall, dataSend)
+		}()
+		select {
+		case res := <-data:
+			return res, nil
+		case <-time.After(time.Duration(b.Config.RequestTimeOut) * time.Millisecond):
 			b.bus.UnSubscribe(channelReceive)
-		})
-
+			return nil, errors.New("Timeout")
+		}
+	} else {
 		b.bus.Publish(channelCall, dataSend)
-	}()
-	select {
-	case res := <-data:
-		return res, nil
-	case <-time.After(time.Duration(b.Config.RequestTimeOut) * time.Millisecond):
-		b.bus.UnSubscribe(channelReceive)
-		return nil, errors.New("Timeout")
+		return nil, nil
 	}
 }

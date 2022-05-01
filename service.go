@@ -10,6 +10,7 @@ type Context struct {
 	Meta              interface{}
 	FromService       string
 	FromAction        string
+	FromEvent         string
 	FromNode          string
 	CallingLevel      int
 	Call              Call

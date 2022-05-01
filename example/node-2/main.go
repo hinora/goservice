@@ -56,7 +56,16 @@ func main() {
 						fmt.Println("Response from math.plus: ", data1, err1)
 					}()
 					wg.Wait()
+					// ctx.Call("event.test", nil, nil)
 					return "This is result from action say hi", nil
+				},
+			},
+		},
+		Events: []goservice.Event{
+			{
+				Name: "event.test",
+				Handle: func(context *goservice.Context) {
+					fmt.Println("Handle event test from node 2")
 				},
 			},
 		},
