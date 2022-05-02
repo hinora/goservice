@@ -2,6 +2,7 @@ package goservice
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,6 +47,7 @@ type TraceConsoleConfig struct {
 
 type Trace struct {
 	Exporter interface{}
+	Lock     sync.RWMutex
 }
 
 const (
@@ -54,6 +56,7 @@ const (
 )
 
 func (b *Broker) initTrace() {
+	logInfo("Trace start")
 	b.traceSpans = map[string]*traceSpan{}
 	if !b.Config.TraceConfig.Enabled {
 		return
@@ -61,7 +64,8 @@ func (b *Broker) initTrace() {
 	switch b.Config.TraceConfig.TraceExpoter {
 	case TraceExporterConsole:
 		b.trace = Trace{
-			Exporter: initTraceConsole(),
+			Exporter: initTraceConsole(b),
+			Lock:     sync.RWMutex{},
 		}
 	}
 }
@@ -70,6 +74,8 @@ func (b *Broker) addTraceSpan(span *traceSpan) string {
 	if !b.Config.TraceConfig.Enabled {
 		return ""
 	}
+	b.trace.Lock.Lock()
+	defer b.trace.Lock.Unlock()
 	b.traceSpans[span.TraceId] = span
 	return span.TraceId
 }
@@ -77,6 +83,8 @@ func (b *Broker) addTraceSpans(spans []traceSpan) {
 	if !b.Config.TraceConfig.Enabled {
 		return
 	}
+	b.trace.Lock.Lock()
+	defer b.trace.Lock.Unlock()
 	for i := 0; i < len(spans); i++ {
 		b.traceSpans[spans[i].TraceId] = &spans[i]
 	}
@@ -143,6 +151,8 @@ func (b *Broker) endTraceSpan(spanId string, err error) {
 	}
 }
 func (b *Broker) findSpan(spanId string) (*traceSpan, error) {
+	b.trace.Lock.RLock()
+	defer b.trace.Lock.RUnlock()
 	if value, ok := b.traceSpans[spanId]; ok {
 		return value, nil
 	}
@@ -151,6 +161,8 @@ func (b *Broker) findSpan(spanId string) (*traceSpan, error) {
 
 func (b *Broker) findTraceChildrens(requestID string) []*traceSpan {
 	traces := []*traceSpan{}
+	b.trace.Lock.RLock()
+	defer b.trace.Lock.RUnlock()
 	for k, v := range b.traceSpans {
 		if v.Tags.RequestId == requestID {
 			traces = append(traces, b.traceSpans[k])
@@ -160,6 +172,8 @@ func (b *Broker) findTraceChildrens(requestID string) []*traceSpan {
 }
 func (b *Broker) findTraceChildrensDeep(spanId string) []*traceSpan {
 	traces := []*traceSpan{}
+	b.trace.Lock.RLock()
+	defer b.trace.Lock.RUnlock()
 	for _, v := range b.traceSpans {
 		if v.ParentId == spanId {
 			traces = append(traces, v)
@@ -174,9 +188,13 @@ func (b *Broker) findTraceChildrensDeep(spanId string) []*traceSpan {
 }
 
 func (b *Broker) removeSpan(spanId string) {
+	b.trace.Lock.Lock()
+	defer b.trace.Lock.Unlock()
 	delete(b.traceSpans, spanId)
 }
 func (b *Broker) removeSpanByParent(parentId string) {
+	b.trace.Lock.Lock()
+	defer b.trace.Lock.Unlock()
 	for _, v := range b.traceSpans {
 		if v.ParentId == parentId {
 			delete(b.traceSpans, v.TraceId)

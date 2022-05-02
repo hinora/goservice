@@ -15,9 +15,27 @@ type Context struct {
 	CallingLevel      int
 	Call              Call
 }
+
+type Method int
+
+const (
+	GET Method = iota + 1
+	POST
+	PUT
+	DELETE
+	PATCH
+	HEAD
+	OPTIONS
+)
+
+type Rest struct {
+	Method Method `json:"method" mapstructure:"method"`
+	Path   string `json:"path" mapstructure:"path"`
+}
 type Action struct {
 	Name   string
 	Params interface{}
+	Rest   Rest
 	Handle func(*Context) (interface{}, error)
 }
 type Event struct {

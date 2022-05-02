@@ -7,6 +7,7 @@ type RegistryNode struct {
 }
 type RegistryAction struct {
 	Name   string      `json:"name" mapstructure:"name"`
+	Rest   Rest        `json:"rest" mapstructure:"rest"`
 	Params interface{} `json:"params" mapstructure:"params"`
 }
 type RegistryEvent struct {

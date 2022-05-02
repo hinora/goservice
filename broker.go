@@ -47,7 +47,7 @@ func Init(config BrokerConfig) *Broker {
 }
 
 func (b *Broker) LoadService(service Service) {
-
+	logInfo("Load service `" + service.Name + "`")
 	b.Services = append(b.Services, &service)
 
 	// add service to registry

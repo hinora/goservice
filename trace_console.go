@@ -10,10 +10,11 @@ import (
 	"github.com/fatih/color"
 )
 
-func initTraceConsole() *traceConsole {
+func initTraceConsole(broker *Broker) *traceConsole {
 	s := &traceConsole{
 		Width:      120,
 		GaugeWidth: 40,
+		Broker:     broker,
 	}
 	return s
 }
@@ -28,6 +29,7 @@ type PrintSpanParent struct {
 type traceConsole struct {
 	Width      int
 	GaugeWidth int
+	Broker     *Broker
 }
 
 func (s *traceConsole) ExportSpan(spans []*traceSpan) {
@@ -61,6 +63,18 @@ func (s *traceConsole) ExportSpan(spans []*traceSpan) {
 	s.drawHorizonalLine()
 	s.drawSpan(spans, spans[0], 0, float64(startTime), float64(duration))
 	s.drawTableBottom()
+
+	// remove span after export
+	go func() {
+		time.Sleep(5000 * time.Millisecond)
+		spanIds := []string{}
+		for _, v := range spans {
+			spanIds = append(spanIds, v.TraceId)
+		}
+		for _, v := range spanIds {
+			s.Broker.removeSpan(v)
+		}
+	}()
 }
 
 func (s *traceConsole) sortSpans(spans []*traceSpan) []*traceSpan {

@@ -107,6 +107,11 @@ func (b *Broker) initDiscovery() {
 }
 
 func (b *Broker) startDiscovery() {
+	logInfo("Discovery start")
+	// emit service info to event internal
+	b.emitServiceInfoInternal()
+
+	// init service info
 	switch b.Config.DiscoveryConfig.DiscoveryType {
 	case DiscoveryTypeRedis:
 		config := b.Config.DiscoveryConfig.Config.(DiscoveryRedisConfig)
@@ -227,6 +232,9 @@ func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 					}
 				}
 				b.initMestricCountCallAction()
+
+				// emit service info to event internal
+				b.emitServiceInfoInternal()
 				logInfo("Receive info from `" + topicInfoData.Sender.NodeId + "`")
 			}
 		}
@@ -266,6 +274,9 @@ func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 				}
 				b.registryServices = tempRegistryServices
 				logInfo("Node `" + topicDiscoveryData.Sender.NodeId + "` disconnected")
+
+				// emit service info to event internal
+				b.emitServiceInfoInternal()
 			}
 		}
 	}()
@@ -340,6 +351,9 @@ func (b *Broker) listenDiscoveryRedis(rdb *redis.Client) {
 				}
 				b.initMestricCountCallAction()
 				logInfo("Receive info from `" + topicInfoData.Sender.NodeId + "`")
+
+				// emit service info to event internal
+				b.emitServiceInfoInternal()
 			}
 		}
 	}()

@@ -73,7 +73,7 @@ type Transporter struct {
 }
 
 func (b *Broker) initTransporter() {
-	b.bus = EventBus{}
+	b.bus = initEventBus()
 	b.transporter = Transporter{
 		Config: b.Config.TransporterConfig,
 	}
@@ -164,7 +164,7 @@ func (b *Broker) initRedisTransporter() {
 		}()
 	}, pubsubRq)
 
-	// subceibe channel response
+	// subscribe channel response
 	channelResponseTransporter := GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response"
 	pbRs := b.transporter.Subscribe(channelResponseTransporter)
 	pubsubRs := pbRs.(*redis.PubSub)

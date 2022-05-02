@@ -58,9 +58,9 @@ func main() {
 			time.Sleep(time.Millisecond * 5000)
 			fmt.Println("service test started")
 
+			fmt.Println(ctx.Call("event.test", nil, nil))
 			data, err := ctx.Call("hello.say_hi", nil, nil)
 			fmt.Println("Response from say hi: ", data, err)
-			fmt.Println(ctx.Call("event.test", nil, nil))
 			// data2, err2 := ctx.Call("hello.say_hi", nil, nil)
 			// fmt.Println("Response from say hi: ", data2, err2)
 		},

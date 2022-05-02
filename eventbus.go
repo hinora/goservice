@@ -2,6 +2,7 @@ package goservice
 
 import (
 	"reflect"
+	"sync"
 )
 
 type EventBusData struct {
@@ -10,50 +11,49 @@ type EventBusData struct {
 }
 
 type EventBus struct {
-	data []EventBusData
+	data map[string]*EventBusData
+	lock sync.RWMutex
 }
 
-func (eb *EventBus) Subscribe(channel string, fn interface{}) {
-	check := false
-	for _, e := range eb.data {
-		if e.Channel == channel {
-			e.Handle = append(e.Handle, reflect.ValueOf(fn))
-			check = true
-		}
+func initEventBus() EventBus {
+	return EventBus{
+		lock: sync.RWMutex{},
+		data: make(map[string]*EventBusData),
 	}
-	if !check {
-		eb.data = append(eb.data, EventBusData{
+}
+func (eb *EventBus) Subscribe(channel string, fn interface{}) {
+	eb.lock.Lock()
+	defer eb.lock.Unlock()
+	if value, ok := eb.data[channel]; ok {
+		value.Handle = append(value.Handle, reflect.ValueOf(fn))
+	} else {
+		eb.data[channel] = &EventBusData{
 			Channel: channel,
 			Handle: []reflect.Value{
 				reflect.ValueOf(fn),
 			},
-		})
+		}
 	}
-
 }
 
 func (eb *EventBus) Publish(channel string, data interface{}) {
-	for _, e := range eb.data {
-		if e.Channel == channel {
-			for _, h := range e.Handle {
-				go func() {
-					h.Call([]reflect.Value{
-						reflect.ValueOf(data),
-					})
-				}()
-			}
+	eb.lock.RLock()
+	defer eb.lock.RUnlock()
+	if value, ok := eb.data[channel]; ok {
+		for i := 0; i < len(value.Handle); i++ {
+			h := value.Handle[i]
+			go func() {
+				h.Call([]reflect.Value{
+					reflect.ValueOf(data),
+				})
+			}()
 		}
 	}
 }
 func (eb *EventBus) UnSubscribe(channel string) {
-	index := -1
-	for i, e := range eb.data {
-		if e.Channel == channel {
-			index = i
-		}
-	}
-	if index != -1 {
-		eb.data[index] = eb.data[len(eb.data)-1]
-		eb.data = eb.data[:len(eb.data)-1]
+	eb.lock.Lock()
+	defer eb.lock.Unlock()
+	if value, ok := eb.data[channel]; ok {
+		delete(eb.data, value.Channel)
 	}
 }
