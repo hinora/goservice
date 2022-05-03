@@ -1,17 +1,162 @@
 package goservice
 
 import (
+	"encoding/json"
+	"io/ioutil"
+	"regexp"
+	"strconv"
 	"time"
 
+	"github.com/bep/debounce"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-type Gateway struct {
+type GatewayConfigRoute struct {
+	Path      string
+	WhileList []string
+}
+type GatewayConfig struct {
+	Name   string
+	Host   string
+	Port   int
+	Routes []GatewayConfigRoute
 }
 
-func (g *Gateway) Init() Service {
+type Gateway struct {
+	Gin          *gin.Engine
+	GinRoutes    []*gin.RouterGroup
+	Services     []RegistryService
+	debouncedGen func(f func())
+	Config       GatewayConfig
+	Service      *Service
+}
 
-	return Service{}
+func (g *Gateway) MapServices() {
+	for _, r := range g.Config.Routes {
+		logInfo("Generate route: `" + r.Path + "`")
+		rG := g.Gin.Group(r.Path)
+		for _, s := range g.Services {
+			for _, a := range s.Actions {
+				if g.checkMatch(s.Name, a, r) {
+					g.genHandle(rG, s.Name, a)
+				}
+			}
+		}
+		g.GinRoutes = append(g.GinRoutes, rG)
+	}
+	g.Gin.Run(g.Config.Host + ":" + strconv.Itoa(g.Config.Port))
+}
+
+func (g *Gateway) genHandle(r *gin.RouterGroup, serviceName string, action RegistryAction) {
+	pathMapping := serviceName + "/" + action.Rest.Path
+	logInfo("Generate gateway end point: `" + action.Rest.Method.String() + "` " + "/" + pathMapping)
+	handle := func(c *gin.Context) {
+		params := g.parseParam(c)
+		data, err := g.Service.Broker.Call(g.Service.Name, "`"+action.Rest.Method.String()+"` "+"/"+pathMapping, serviceName+"."+action.Name, params, nil)
+		if err != nil {
+			c.JSON(500, err.Error())
+		} else {
+			c.JSON(200, data)
+		}
+	}
+	switch action.Rest.Method {
+	case GET:
+		r.GET(pathMapping, handle)
+		break
+	case POST:
+		r.GET(pathMapping, handle)
+		break
+	case PUT:
+		r.GET(pathMapping, handle)
+		break
+	case DELETE:
+		r.GET(pathMapping, handle)
+		break
+	case PATCH:
+		r.GET(pathMapping, handle)
+		break
+	case HEAD:
+		r.GET(pathMapping, handle)
+		break
+	case OPTIONS:
+		r.GET(pathMapping, handle)
+		break
+	}
+}
+func (g *Gateway) checkMatch(serviceName string, action RegistryAction, r GatewayConfigRoute) bool {
+	if action.Rest == (Rest{}) {
+		return false
+	}
+	for _, wL := range r.WhileList {
+		check, err := regexp.MatchString(wL, serviceName+"."+action.Name)
+		if check && err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *Gateway) parseParam(c *gin.Context) map[string]interface{} {
+	// query
+	queryRaw := c.Request.URL.Query()
+	query := map[string]interface{}{}
+	for k, v := range queryRaw {
+		if len(v) == 1 {
+			query[k] = v[0]
+		} else {
+			query[k] = v
+		}
+	}
+
+	// param
+	paramsRaw := c.Params
+	params := map[string]interface{}{}
+	for i := 0; i < len(paramsRaw); i++ {
+		params[paramsRaw[i].Key] = paramsRaw[i].Value
+	}
+
+	// body
+	jsonDataByte, _ := ioutil.ReadAll(c.Request.Body)
+	var jsonData map[string]interface{}
+	json.Unmarshal(jsonDataByte, &jsonData)
+	return mergeMap(query, params, jsonData)
+}
+func mergeMap(m ...map[string]interface{}) map[string]interface{} {
+	if len(m) == 1 {
+		return m[0]
+	}
+	result := m[0]
+	for i := 1; i < len(m); i++ {
+		for k, v := range m[i] {
+			result[k] = v
+		}
+	}
+	return result
+}
+func InitGateway(config GatewayConfig) *Service {
+	gin.SetMode(gin.ReleaseMode)
+	gateway := Gateway{
+		debouncedGen: debounce.New(1000 * time.Millisecond),
+		Gin:          gin.New(),
+		Config:       config,
+	}
+	service := Service{
+		Name: config.Name,
+		Events: []Event{
+			{
+				Name: eventServiceInfo,
+				Handle: func(ctx *Context) {
+					data := ctx.Params.([]RegistryService)
+					gateway.Services = data
+					gateway.Gin = gin.New()
+					gateway.debouncedGen(gateway.MapServices)
+				},
+			},
+		},
+	}
+	gateway.Service = &service
+	return &service
 }
 
 const (

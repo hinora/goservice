@@ -108,6 +108,8 @@ func (b *Broker) initDiscovery() {
 
 func (b *Broker) startDiscovery() {
 	logInfo("Discovery start")
+	// init count metrics
+	b.initMestricCountCallAction()
 	// emit service info to event internal
 	b.emitServiceInfoInternal()
 
@@ -177,6 +179,7 @@ func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 						registryActions = append(registryActions, RegistryAction{
 							Name:   a.Name,
 							Params: a.Params,
+							Rest:   a.Rest,
 						})
 					}
 					var registryEvents []RegistryEvent
@@ -430,6 +433,7 @@ func (b *Broker) clearNodeTimeout() {
 					}
 				}
 				b.registryServices = tempServices
+				b.emitServiceInfoInternal()
 			}
 		}
 	}()

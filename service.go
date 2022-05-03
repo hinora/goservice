@@ -28,6 +28,33 @@ const (
 	OPTIONS
 )
 
+func (m Method) String() string {
+	switch m {
+	case GET:
+		return "GET"
+		break
+	case POST:
+		return "POST"
+		break
+	case PUT:
+		return "PUT"
+		break
+	case DELETE:
+		return "DELETE"
+		break
+	case PATCH:
+		return "PATCH"
+		break
+	case HEAD:
+		return "HEAD"
+		break
+	case OPTIONS:
+		return "OPTIONS"
+		break
+	}
+	return ""
+}
+
 type Rest struct {
 	Method Method `json:"method" mapstructure:"method"`
 	Path   string `json:"path" mapstructure:"path"`
@@ -49,4 +76,5 @@ type Service struct {
 	Events  []Event
 	Started func(*Context)
 	Stoped  func(*Context)
+	Broker  *Broker
 }

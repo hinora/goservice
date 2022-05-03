@@ -46,9 +46,9 @@ func Init(config BrokerConfig) *Broker {
 	return &broker
 }
 
-func (b *Broker) LoadService(service Service) {
+func (b *Broker) LoadService(service *Service) {
 	logInfo("Load service `" + service.Name + "`")
-	b.Services = append(b.Services, &service)
+	b.Services = append(b.Services, service)
 
 	// add service to registry
 	var registryActions []RegistryAction
@@ -56,6 +56,7 @@ func (b *Broker) LoadService(service Service) {
 		registryActions = append(registryActions, RegistryAction{
 			Name:   a.Name,
 			Params: a.Params,
+			Rest:   a.Rest,
 		})
 	}
 	var registryEvents []RegistryEvent
@@ -76,8 +77,9 @@ func (b *Broker) LoadService(service Service) {
 	b.debouncedEmitInfo(b.startDiscovery)
 	// handle logic service
 
+	// mapping broker to service
+	service.Broker = b
 	// service lifecycle
-
 	if service.Started != nil {
 		go func() {
 			//trace
@@ -130,6 +132,33 @@ func (b *Broker) LoadService(service Service) {
 	}
 }
 
+func (b *Broker) Call(callerService string, traceName string, action string, params interface{}, meta interface{}) (interface{}, error) {
+	//trace
+	if traceName == "" {
+		traceName = "Call from service `" + callerService + "`"
+	}
+	spanId := b.startTraceSpan(traceName, "action", "", "", map[string]interface{}{}, "", "", 1)
+
+	ctxCall := Context{
+		RequestId:         uuid.New().String(),
+		ResponseId:        uuid.New().String(),
+		Params:            params,
+		Meta:              meta,
+		FromNode:          b.Config.NodeId,
+		FromService:       callerService,
+		FromAction:        "",
+		CallingLevel:      1,
+		TraceParentId:     spanId,
+		TraceParentRootId: spanId,
+	}
+	callResult, err := b.callActionOrEvent(ctxCall, action, params, meta, "", "", "")
+	b.addTraceSpans(callResult.TraceSpans)
+	if err != nil {
+		return nil, err
+	}
+	b.endTraceSpan(spanId, nil)
+	return callResult.Data, err
+}
 func (b *Broker) Hold() {
 	select {}
 }

@@ -34,16 +34,20 @@ func main() {
 		},
 	})
 
-	b.LoadService(goservice.Service{
+	b.LoadService(&goservice.Service{
 		Name: "hello",
 		Actions: []goservice.Action{
 			{
 				Name:   "say_hi",
 				Params: map[string]interface{}{},
+				Rest: goservice.Rest{
+					Method: goservice.GET,
+					Path:   "/say_hi",
+				},
 				Handle: func(ctx *goservice.Context) (interface{}, error) {
 					fmt.Println("Handle action say hi from node 2")
 					var wg sync.WaitGroup
-					totalCall := 100
+					totalCall := 2
 					for i := 0; i < totalCall; i++ {
 						wg.Add(1)
 					}
@@ -68,12 +72,6 @@ func main() {
 				Name: "event.test",
 				Handle: func(context *goservice.Context) {
 					fmt.Println("Handle event test from node 2")
-				},
-			},
-			{
-				Name: "service.info",
-				Handle: func(context *goservice.Context) {
-					fmt.Println("Info: ", context.Params)
 				},
 			},
 		},

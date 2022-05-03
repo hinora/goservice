@@ -33,7 +33,7 @@ func main() {
 		},
 	})
 
-	b.LoadService(goservice.Service{
+	b.LoadService(&goservice.Service{
 		Name: "hello",
 		Actions: []goservice.Action{
 			{
