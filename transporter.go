@@ -349,13 +349,6 @@ func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interf
 	if service.Name == "" && action.Name == "" && len(events) == 0 {
 		return ResponseTranferData{}, errors.New("Action or event `" + actionName + "` is not existed")
 	}
-	// map service
-	for _, s := range b.Services {
-		if s.Name == service.Name {
-			ctx.Service = s
-			break
-		}
-	}
 	// call event
 	if len(events) != 0 {
 		for i := 0; i < len(events); i++ {
