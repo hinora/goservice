@@ -56,7 +56,7 @@ const (
 )
 
 func (b *Broker) initTrace() {
-	logInfo("Trace start")
+	b.LogInfo("Trace start")
 	b.traceSpans = map[string]*traceSpan{}
 	if !b.Config.TraceConfig.Enabled {
 		return

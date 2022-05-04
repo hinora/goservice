@@ -14,6 +14,17 @@ type Context struct {
 	FromNode          string
 	CallingLevel      int
 	Call              Call
+	Service           *Service
+}
+
+func (c *Context) LogInfo(message string) {
+	c.Service.Broker.LogInfo(message)
+}
+func (c *Context) LogWarning(message string) {
+	c.Service.Broker.LogWarning(message)
+}
+func (c *Context) LogError(message string) {
+	c.Service.Broker.LogError(message)
 }
 
 type Method int

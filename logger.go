@@ -2,8 +2,6 @@ package goservice
 
 import (
 	"time"
-
-	"github.com/fatih/color"
 )
 
 // LOGGER
@@ -26,8 +24,8 @@ type LogData struct {
 type LogExternal int
 
 const (
-	Console LogExternal = iota + 1
-	File
+	LogConsole LogExternal = iota + 1
+	LogFile
 )
 
 type Logconfig struct {
@@ -35,33 +33,60 @@ type Logconfig struct {
 	Type   LogExternal
 }
 
-func logInfo(message string) {
-	var log LogData
-	log.Time = int(time.Now().Unix())
-	log.Message = message
-	// just demo on console. Need replace with log external
-	color.New(color.FgCyan).Add(color.Underline).Print(time.Unix(int64(log.Time), 0))
-	color.New(color.FgGreen).Add(color.Underline).Print(" Info ")
-	color.New(color.FgCyan).Add(color.Underline).Print(log.Message)
-	color.New(color.FgBlack).Add(color.Underline).Println(" ")
+type Log struct {
+	Config  Logconfig
+	Extenal interface{}
 }
-func logWarning(message string) {
-	var log LogData
-	log.Time = int(time.Now().Unix())
-	log.Message = message
-	// just demo on console. Need replace with log external
-	color.New(color.FgCyan).Add(color.Underline).Print(time.Unix(int64(log.Time), 0))
-	color.New(color.FgYellow).Add(color.Underline).Print(" Waring ")
-	color.New(color.FgCyan).Add(color.Underline).Print(log.Message)
-	color.New(color.FgBlack).Add(color.Underline).Println(" ")
+
+func (b *Broker) initLog() {
+	switch b.Config.LoggerConfig.Type {
+	case LogConsole:
+		logExternal := LoggerConsole{
+			data: []LogData{},
+		}
+		go logExternal.Start()
+		b.logs = Log{
+			Config:  b.Config.LoggerConfig,
+			Extenal: &logExternal,
+		}
+		break
+	case LogFile:
+		break
+	}
 }
-func logError(message string) {
+
+// extenal console
+func (b *Broker) LogInfo(message string) {
 	var log LogData
 	log.Time = int(time.Now().Unix())
 	log.Message = message
-	// just demo on console. Need replace with log external
-	color.New(color.FgCyan).Add(color.Underline).Print(time.Unix(int64(log.Time), 0))
-	color.New(color.FgRed).Add(color.Underline).Print(" Error ")
-	color.New(color.FgCyan).Add(color.Underline).Print(log.Message)
-	color.New(color.FgBlack).Add(color.Underline).Println(" ")
+	log.Type = LogTypeInfo
+	b.logs.exportLog(log)
+}
+func (b *Broker) LogWarning(message string) {
+	var log LogData
+	log.Time = int(time.Now().Unix())
+	log.Message = message
+	log.Type = LogTypeWarning
+	b.logs.exportLog(log)
+}
+func (b *Broker) LogError(message string) {
+	var log LogData
+	log.Time = int(time.Now().Unix())
+	log.Message = message
+	log.Type = LogTypeError
+	b.logs.exportLog(log)
+}
+func (l *Log) exportLog(log LogData) {
+	if !l.Config.Enable {
+		return
+	}
+	switch l.Config.Type {
+	case LogConsole:
+		logExternal := l.Extenal.(*LoggerConsole)
+		logExternal.WriteLog(log)
+		break
+	case LogFile:
+		break
+	}
 }

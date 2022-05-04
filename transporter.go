@@ -33,6 +33,7 @@ type TransporterRedisConfig struct {
 }
 
 type TransporterConfig struct {
+	Enable          bool
 	TransporterType TransporterType
 	Config          interface{}
 }
@@ -76,6 +77,9 @@ func (b *Broker) initTransporter() {
 	b.bus = initEventBus()
 	b.transporter = Transporter{
 		Config: b.Config.TransporterConfig,
+	}
+	if !b.Config.TransporterConfig.Enable {
+		return
 	}
 
 	switch b.transporter.Config.TransporterType {
@@ -201,6 +205,13 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 				TraceParentId:     data.TraceParentId,
 				TraceParentRootId: data.TraceRootParentId,
 			}
+			// map service
+			for _, s := range b.Services {
+				if s.Name == serviceName {
+					ctx.Service = s
+					break
+				}
+			}
 
 			// start trace
 			spanId := b.startTraceSpan("Action `"+serviceName+"."+action.Name+"`", "action", serviceName, action.Name, data.Params, ctx.FromNode, ctx.TraceParentId, ctx.CallingLevel, data.TraceRootParentId)
@@ -219,6 +230,7 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 					TraceParentId:     spanId,
 					TraceParentRootId: data.TraceRootParentId,
 				}
+
 				callResult, err := b.callActionOrEvent(ctxCall, a, params, meta, serviceName, action.Name, "")
 				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
@@ -287,6 +299,13 @@ func (b *Broker) listenEventCall(serviceName string, event Event) {
 				TraceParentId:     data.TraceParentId,
 				TraceParentRootId: data.TraceRootParentId,
 			}
+			// map service
+			for _, s := range b.Services {
+				if s.Name == serviceName {
+					ctx.Service = s
+					break
+				}
+			}
 
 			// start trace
 			spanId := b.startTraceSpan("Event `"+event.Name+"`", "action", serviceName, event.Name, data.Params, ctx.FromNode, ctx.TraceParentId, ctx.CallingLevel, data.TraceRootParentId)
@@ -305,6 +324,7 @@ func (b *Broker) listenEventCall(serviceName string, event Event) {
 					TraceParentId:     spanId,
 					TraceParentRootId: data.TraceRootParentId,
 				}
+
 				callResult, err := b.callActionOrEvent(ctxCall, a, params, meta, serviceName, "", event.Name)
 				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
@@ -329,6 +349,13 @@ func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interf
 	if service.Name == "" && action.Name == "" && len(events) == 0 {
 		return ResponseTranferData{}, errors.New("Action or event `" + actionName + "` is not existed")
 	}
+	// map service
+	for _, s := range b.Services {
+		if s.Name == service.Name {
+			ctx.Service = s
+			break
+		}
+	}
 	// call event
 	if len(events) != 0 {
 		for i := 0; i < len(events); i++ {
@@ -352,8 +379,14 @@ func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interf
 					TraceParentId:     ctx.TraceParentId,
 					TraceRootParentId: ctx.TraceParentRootId,
 				}
-				// push transporter
-				b.transporter.Emit(channelTransporter, dataSend)
+				if events[i].Node.NodeId == b.Config.NodeId {
+					// push to event internal
+					channelCall := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + service.Name + "." + events[i].Name
+					b.emitWithTimeout(channelCall, "", dataSend)
+				} else {
+					// push to transporter
+					b.transporter.Emit(channelTransporter, dataSend)
+				}
 			}
 		}
 		return ResponseTranferData{}, nil
@@ -393,8 +426,14 @@ func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interf
 			}()
 		})
 
-		// push transporter
-		b.transporter.Emit(channelTransporter, dataSend)
+		if service.Node.NodeId == b.Config.NodeId {
+			// push to event internal
+			channelCall := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + service.Name + "." + action.Name
+			b.emitWithTimeout(channelCall, "", dataSend)
+		} else {
+			// push to transporter
+			b.transporter.Emit(channelTransporter, dataSend)
+		}
 
 		// Service in local? Use internal event bus
 		// channelCall := GO_SERVICE_PREFIX + "." + broker.Config.NodeId + "." + dT.CallToService + "." + dT.CallToAction

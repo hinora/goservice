@@ -24,6 +24,7 @@ type DiscoveryRedisConfig struct {
 	Db       int
 }
 type DiscoveryConfig struct {
+	Enable                   bool
 	HeartbeatInterval        int
 	HeartbeatTimeout         int
 	CleanOfflineNodesTimeout int
@@ -107,11 +108,14 @@ func (b *Broker) initDiscovery() {
 }
 
 func (b *Broker) startDiscovery() {
-	logInfo("Discovery start")
 	// init count metrics
 	b.initMestricCountCallAction()
 	// emit service info to event internal
 	b.emitServiceInfoInternal()
+	if !b.Config.DiscoveryConfig.Enable {
+		return
+	}
+	b.LogInfo("Discovery start")
 
 	// init service info
 	switch b.Config.DiscoveryConfig.DiscoveryType {
@@ -201,7 +205,7 @@ func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 				channel := GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsInfo) + "." + topicDiscoveryData.Sender.NodeId
 				infoSeri, _ := SerializerJson(info)
 				rdb.Publish(ctx, channel, infoSeri)
-				logInfo("Node `" + topicDiscoveryData.Sender.NodeId + "` connected")
+				b.LogInfo("Node `" + topicDiscoveryData.Sender.NodeId + "` connected")
 			}
 		}
 	}()
@@ -238,7 +242,7 @@ func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 
 				// emit service info to event internal
 				b.emitServiceInfoInternal()
-				logInfo("Receive info from `" + topicInfoData.Sender.NodeId + "`")
+				b.LogInfo("Receive info from `" + topicInfoData.Sender.NodeId + "`")
 			}
 		}
 	}()
@@ -276,7 +280,7 @@ func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 					}
 				}
 				b.registryServices = tempRegistryServices
-				logInfo("Node `" + topicDiscoveryData.Sender.NodeId + "` disconnected")
+				b.LogInfo("Node `" + topicDiscoveryData.Sender.NodeId + "` disconnected")
 
 				// emit service info to event internal
 				b.emitServiceInfoInternal()
@@ -353,7 +357,7 @@ func (b *Broker) listenDiscoveryRedis(rdb *redis.Client) {
 					}
 				}
 				b.initMestricCountCallAction()
-				logInfo("Receive info from `" + topicInfoData.Sender.NodeId + "`")
+				b.LogInfo("Receive info from `" + topicInfoData.Sender.NodeId + "`")
 
 				// emit service info to event internal
 				b.emitServiceInfoInternal()
@@ -415,7 +419,7 @@ func (b *Broker) clearNodeTimeout() {
 					tempNodes = append(tempNodes, n)
 				} else {
 					checkNodeTimeOut = true
-					logInfo("Node `" + n.NodeId + "` timeout. Removed")
+					b.LogInfo("Node `" + n.NodeId + "` timeout. Removed")
 				}
 			}
 			if checkNodeTimeOut {

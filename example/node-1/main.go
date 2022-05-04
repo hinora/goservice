@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/hinora/goservice"
@@ -11,6 +10,7 @@ func main() {
 	b := goservice.Init(goservice.BrokerConfig{
 		NodeId: "Node-1",
 		DiscoveryConfig: goservice.DiscoveryConfig{
+			Enable:        false,
 			DiscoveryType: goservice.DiscoveryTypeRedis,
 			Config: goservice.DiscoveryRedisConfig{
 				Port: 6379,
@@ -21,6 +21,7 @@ func main() {
 			CleanOfflineNodesTimeout: 9000,
 		},
 		TransporterConfig: goservice.TransporterConfig{
+			Enable:          false,
 			TransporterType: goservice.TransporterTypeRedis,
 			Config: goservice.TransporterRedisConfig{
 				Port: 6379,
@@ -31,6 +32,10 @@ func main() {
 		TraceConfig: goservice.TraceConfig{
 			Enabled:      true,
 			TraceExpoter: goservice.TraceExporterConsole,
+		},
+		LoggerConfig: goservice.Logconfig{
+			Enable: true,
+			Type:   goservice.LogConsole,
 		},
 	})
 	b.LoadService(&goservice.Service{
@@ -43,8 +48,8 @@ func main() {
 					Method: goservice.GET,
 					Path:   "/plus",
 				},
-				Handle: func(context *goservice.Context) (interface{}, error) {
-					fmt.Println("Handle action plus")
+				Handle: func(ctx *goservice.Context) (interface{}, error) {
+					ctx.LogInfo("Handle action plus")
 					time.Sleep(time.Second * 1)
 					return "This is result from action math.plus", nil
 				},
@@ -53,8 +58,8 @@ func main() {
 		Events: []goservice.Event{
 			{
 				Name: "event.test",
-				Handle: func(context *goservice.Context) {
-					fmt.Println("Handle event test from node 1")
+				Handle: func(ctx *goservice.Context) {
+					ctx.LogInfo("Handle event test from node 1")
 				},
 			},
 		},

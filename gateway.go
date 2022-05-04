@@ -34,7 +34,7 @@ type Gateway struct {
 
 func (g *Gateway) MapServices() {
 	for _, r := range g.Config.Routes {
-		logInfo("Generate route: `" + r.Path + "`")
+		g.Service.Broker.LogInfo("Generate route: `" + r.Path + "`")
 		rG := g.Gin.Group(r.Path)
 		for _, s := range g.Services {
 			for _, a := range s.Actions {
@@ -50,7 +50,7 @@ func (g *Gateway) MapServices() {
 
 func (g *Gateway) genHandle(r *gin.RouterGroup, serviceName string, action RegistryAction) {
 	pathMapping := serviceName + "/" + action.Rest.Path
-	logInfo("Generate gateway end point: `" + action.Rest.Method.String() + "` " + "/" + pathMapping)
+	g.Service.Broker.LogInfo("Generate gateway end point: `" + action.Rest.Method.String() + "` " + "/" + pathMapping)
 	handle := func(c *gin.Context) {
 		params := g.parseParam(c)
 		data, err := g.Service.Broker.Call(g.Service.Name, "`"+action.Rest.Method.String()+"` "+"/"+pathMapping, serviceName+"."+action.Name, params, nil)

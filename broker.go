@@ -11,7 +11,7 @@ import (
 type BrokerConfig struct {
 	NodeId            string
 	TransporterConfig TransporterConfig
-	Logger            string
+	LoggerConfig      Logconfig
 	Metrics           string
 	TraceConfig       TraceConfig
 	DiscoveryConfig   DiscoveryConfig
@@ -32,6 +32,7 @@ type Broker struct {
 	registryNode       RegistryNode
 	debouncedEmitInfo  func(f func())
 	trace              Trace
+	logs               Log
 }
 
 func Init(config BrokerConfig) *Broker {
@@ -42,12 +43,13 @@ func Init(config BrokerConfig) *Broker {
 	broker.initDiscovery()
 	broker.initTransporter()
 	broker.initTrace()
+	broker.initLog()
 	broker.debouncedEmitInfo = debounce.New(1000 * time.Millisecond)
 	return &broker
 }
 
 func (b *Broker) LoadService(service *Service) {
-	logInfo("Load service `" + service.Name + "`")
+	b.LogInfo("Load service `" + service.Name + "`")
 	b.Services = append(b.Services, service)
 
 	// add service to registry
@@ -96,6 +98,7 @@ func (b *Broker) LoadService(service *Service) {
 				TraceParentId:     spanId,
 				TraceParentRootId: spanId,
 			}
+			context.Service = service
 			context.Call = func(action string, params interface{}, meta interface{}) (interface{}, error) {
 				ctxCall := Context{
 					RequestId:         uuid.New().String(),
@@ -153,10 +156,10 @@ func (b *Broker) Call(callerService string, traceName string, action string, par
 	}
 	callResult, err := b.callActionOrEvent(ctxCall, action, params, meta, "", "", "")
 	b.addTraceSpans(callResult.TraceSpans)
+	b.endTraceSpan(spanId, err)
 	if err != nil {
 		return nil, err
 	}
-	b.endTraceSpan(spanId, nil)
 	return callResult.Data, err
 }
 func (b *Broker) Hold() {
