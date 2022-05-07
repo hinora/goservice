@@ -222,7 +222,7 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 					RequestId:         uuid.New().String(),
 					ResponseId:        uuid.New().String(),
 					Params:            params,
-					Meta:              meta,
+					Meta:              ctx.Meta,
 					FromNode:          b.Config.NodeId,
 					FromService:       serviceName,
 					FromAction:        action.Name,
@@ -316,7 +316,7 @@ func (b *Broker) listenEventCall(serviceName string, event Event) {
 					RequestId:         uuid.New().String(),
 					ResponseId:        uuid.New().String(),
 					Params:            params,
-					Meta:              meta,
+					Meta:              ctx.Meta,
 					FromNode:          b.Config.NodeId,
 					FromService:       serviceName,
 					FromEvent:         event.Name,
@@ -358,7 +358,7 @@ func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interf
 				responseId := uuid.New().String()
 				dataSend := RequestTranferData{
 					Params:            params,
-					Meta:              meta,
+					Meta:              ctx.Meta,
 					RequestId:         ctx.RequestId,
 					ResponseId:        responseId,
 					CallerNodeId:      b.Config.NodeId,
@@ -395,7 +395,7 @@ func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interf
 		channelInternal = GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response." + responseId
 		dataSend := RequestTranferData{
 			Params:            params,
-			Meta:              meta,
+			Meta:              ctx.Meta,
 			RequestId:         ctx.RequestId,
 			ResponseId:        responseId,
 			CallerNodeId:      b.Config.NodeId,

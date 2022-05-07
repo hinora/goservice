@@ -29,8 +29,9 @@ const (
 )
 
 type Logconfig struct {
-	Enable bool
-	Type   LogExternal
+	Enable   bool
+	Type     LogExternal
+	LogLevel LogType
 }
 
 type Log struct {
@@ -79,6 +80,9 @@ func (b *Broker) LogError(message string) {
 }
 func (l *Log) exportLog(log LogData) {
 	if !l.Config.Enable {
+		return
+	}
+	if l.Config.LogLevel > log.Type {
 		return
 	}
 	switch l.Config.Type {

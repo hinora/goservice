@@ -65,22 +65,22 @@ func (g *Gateway) genHandle(r *gin.RouterGroup, serviceName string, action Regis
 		r.GET(pathMapping, handle)
 		break
 	case POST:
-		r.GET(pathMapping, handle)
+		r.POST(pathMapping, handle)
 		break
 	case PUT:
-		r.GET(pathMapping, handle)
+		r.PUT(pathMapping, handle)
 		break
 	case DELETE:
-		r.GET(pathMapping, handle)
+		r.DELETE(pathMapping, handle)
 		break
 	case PATCH:
-		r.GET(pathMapping, handle)
+		r.PATCH(pathMapping, handle)
 		break
 	case HEAD:
-		r.GET(pathMapping, handle)
+		r.HEAD(pathMapping, handle)
 		break
 	case OPTIONS:
-		r.GET(pathMapping, handle)
+		r.OPTIONS(pathMapping, handle)
 		break
 	}
 }

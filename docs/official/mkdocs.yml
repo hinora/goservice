@@ -1,0 +1,13 @@
+site_name: Go Service
+nav:
+  - Home: index.md
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.tabs
+extra:
+  generator: false
+
+copyright: Copyright &copy; 2022 Hinora
+repo_url: https://github.com/hinora/goservice

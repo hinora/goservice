@@ -1,7 +1,8 @@
 package main
 
 import (
-	"time"
+	"errors"
+	"fmt"
 
 	"github.com/hinora/goservice"
 )
@@ -34,8 +35,9 @@ func main() {
 			TraceExpoter: goservice.TraceExporterConsole,
 		},
 		LoggerConfig: goservice.Logconfig{
-			Enable: true,
-			Type:   goservice.LogConsole,
+			Enable:   true,
+			Type:     goservice.LogConsole,
+			LogLevel: goservice.LogTypeInfo,
 		},
 	})
 	b.LoadService(&goservice.Service{
@@ -45,13 +47,27 @@ func main() {
 				Name:   "plus",
 				Params: map[string]interface{}{},
 				Rest: goservice.Rest{
-					Method: goservice.GET,
+					Method: goservice.POST,
 					Path:   "/plus",
 				},
 				Handle: func(ctx *goservice.Context) (interface{}, error) {
-					ctx.LogInfo("Handle action plus")
-					time.Sleep(time.Second * 1)
-					return "This is result from action math.plus", nil
+					ctx.LogWarning("Handle action plus")
+					// time.Sleep(time.Second * 1)
+					ctx.Meta = map[string]interface{}{
+						"test": "aaa",
+					}
+					ctx.Call("math.minus", nil, nil)
+					return ctx.Params, nil
+				},
+			},
+			{
+				Name:   "minus",
+				Params: map[string]interface{}{},
+				Handle: func(ctx *goservice.Context) (interface{}, error) {
+					ctx.LogWarning("Handle action minus")
+					fmt.Println("meta incoming: ", ctx.Meta)
+					// time.Sleep(time.Second * 1)
+					return "This is result from action math.minus", errors.New("Test")
 				},
 			},
 		},

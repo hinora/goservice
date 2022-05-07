@@ -42,9 +42,11 @@ func Init(config BrokerConfig) *Broker {
 	}
 	broker.initDiscovery()
 	broker.initTransporter()
+	broker.debouncedEmitInfo = debounce.New(1000 * time.Millisecond)
+	broker.debouncedEmitInfo(broker.startDiscovery)
 	broker.initTrace()
 	broker.initLog()
-	broker.debouncedEmitInfo = debounce.New(1000 * time.Millisecond)
+	broker.LogInfo("Broker started")
 	return &broker
 }
 
@@ -104,7 +106,7 @@ func (b *Broker) LoadService(service *Service) {
 					RequestId:         uuid.New().String(),
 					ResponseId:        uuid.New().String(),
 					Params:            params,
-					Meta:              meta,
+					Meta:              context.Meta,
 					FromNode:          b.Config.NodeId,
 					FromService:       service.Name,
 					FromAction:        "",
