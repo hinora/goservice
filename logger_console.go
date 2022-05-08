@@ -37,20 +37,20 @@ func (l *LoggerConsole) exportLog() {
 	l.exportLog()
 }
 func (l *LoggerConsole) logInfo(log LogData) {
-	color.New(color.FgCyan).Add(color.Underline).Print(time.Unix(int64(log.Time), 0))
-	color.New(color.FgGreen).Add(color.Underline).Print(" Info ")
-	color.New(color.FgCyan).Add(color.Underline).Print(log.Message)
-	color.New(color.FgBlack).Add(color.Underline).Println(" ")
+	color.New(color.FgCyan).Print(time.Unix(int64(log.Time), 0))
+	color.New(color.FgGreen).Print(" Info ")
+	color.New(color.FgCyan).Print(log.Message)
+	color.New(color.FgBlack).Println(" ")
 }
 func (l *LoggerConsole) logWarning(log LogData) {
-	color.New(color.FgCyan).Add(color.Underline).Print(time.Unix(int64(log.Time), 0))
-	color.New(color.FgYellow).Add(color.Underline).Print(" Waring ")
-	color.New(color.FgCyan).Add(color.Underline).Print(log.Message)
-	color.New(color.FgBlack).Add(color.Underline).Println(" ")
+	color.New(color.FgCyan).Print(time.Unix(int64(log.Time), 0))
+	color.New(color.FgYellow).Print(" Waring ")
+	color.New(color.FgCyan).Print(log.Message)
+	color.New(color.FgBlack).Println(" ")
 }
 func (l *LoggerConsole) logError(log LogData) {
-	color.New(color.FgCyan).Add(color.Underline).Print(time.Unix(int64(log.Time), 0))
-	color.New(color.FgRed).Add(color.Underline).Print(" Error ")
-	color.New(color.FgCyan).Add(color.Underline).Print(log.Message)
-	color.New(color.FgBlack).Add(color.Underline).Println(" ")
+	color.New(color.FgCyan).Print(time.Unix(int64(log.Time), 0))
+	color.New(color.FgRed).Print(" Error ")
+	color.New(color.FgCyan).Print(log.Message)
+	color.New(color.FgBlack).Println(" ")
 }

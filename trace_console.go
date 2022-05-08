@@ -103,28 +103,28 @@ func (s *traceConsole) deepSortSpan(span *traceSpan, spans []*traceSpan, result 
 }
 
 func (s *traceConsole) drawTableTop() {
-	color.New(color.FgWhite).Add(color.Underline).Println("┌" + r("─", s.Width-2) + "┐")
+	color.New(color.FgWhite).Println("┌" + r("─", s.Width-2) + "┐")
 	// fmt.Println("┌" + r("─", s.Width-2) + "┐")
 }
 
 func (s *traceConsole) drawHorizonalLine() {
-	color.New(color.FgWhite).Add(color.Underline).Println("├" + r("─", s.Width-2) + "┤")
+	color.New(color.FgWhite).Println("├" + r("─", s.Width-2) + "┤")
 	// fmt.Println("├" + r("─", s.Width-2) + "┤")
 }
 
 func (s *traceConsole) drawLine(text string, drawError bool) {
-	color.New(color.FgWhite).Add(color.Underline).Print("│ ")
+	color.New(color.FgWhite).Print("│ ")
 	if drawError {
-		color.New(color.FgRed).Add(color.Underline).Print(text)
+		color.New(color.FgRed).Print(text)
 	} else {
-		color.New(color.FgWhite).Add(color.Underline).Print(text)
+		color.New(color.FgWhite).Print(text)
 	}
-	color.New(color.FgWhite).Add(color.Underline).Println(" │")
+	color.New(color.FgWhite).Println(" │")
 	// fmt.Println("│ " + text + " │")
 }
 
 func (s *traceConsole) drawTableBottom() {
-	color.New(color.FgWhite).Add(color.Underline).Println("└" + r("─", s.Width-2) + "┘")
+	color.New(color.FgWhite).Println("└" + r("─", s.Width-2) + "┘")
 	// fmt.Println("└" + r("─", s.Width-2) + "┘")
 }
 

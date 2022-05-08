@@ -101,7 +101,11 @@ func (b *Broker) LoadService(service *Service) {
 				TraceParentRootId: spanId,
 			}
 			context.Service = service
-			context.Call = func(action string, params interface{}, meta interface{}) (interface{}, error) {
+			context.Call = func(action string, params interface{}, opts ...CallOpts) (interface{}, error) {
+				optsTemp := CallOpts{}
+				if len(opts) != 0 {
+					optsTemp = opts[0]
+				}
 				ctxCall := Context{
 					RequestId:         uuid.New().String(),
 					ResponseId:        uuid.New().String(),
@@ -114,7 +118,7 @@ func (b *Broker) LoadService(service *Service) {
 					TraceParentId:     spanId,
 					TraceParentRootId: spanId,
 				}
-				callResult, err := b.callActionOrEvent(ctxCall, action, params, meta, service.Name, "", "")
+				callResult, err := b.callActionOrEvent(ctxCall, action, params, optsTemp, service.Name, "", "")
 				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
@@ -137,7 +141,7 @@ func (b *Broker) LoadService(service *Service) {
 	}
 }
 
-func (b *Broker) Call(callerService string, traceName string, action string, params interface{}, meta interface{}) (interface{}, error) {
+func (b *Broker) Call(callerService string, traceName string, action string, params interface{}, opts CallOpts) (interface{}, error) {
 	//trace
 	if traceName == "" {
 		traceName = "Call from service `" + callerService + "`"
@@ -148,7 +152,7 @@ func (b *Broker) Call(callerService string, traceName string, action string, par
 		RequestId:         uuid.New().String(),
 		ResponseId:        uuid.New().String(),
 		Params:            params,
-		Meta:              meta,
+		Meta:              nil,
 		FromNode:          b.Config.NodeId,
 		FromService:       callerService,
 		FromAction:        "",
@@ -156,7 +160,7 @@ func (b *Broker) Call(callerService string, traceName string, action string, par
 		TraceParentId:     spanId,
 		TraceParentRootId: spanId,
 	}
-	callResult, err := b.callActionOrEvent(ctxCall, action, params, meta, "", "", "")
+	callResult, err := b.callActionOrEvent(ctxCall, action, params, opts, "", "", "")
 	b.addTraceSpans(callResult.TraceSpans)
 	b.endTraceSpan(spanId, err)
 	if err != nil {

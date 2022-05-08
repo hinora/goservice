@@ -1,6 +1,8 @@
 package goservice
 
-type Call func(action string, params interface{}, meta interface{}) (interface{}, error)
+type CallOpts struct {
+}
+type Call func(action string, params interface{}, opts ...CallOpts) (interface{}, error)
 type Context struct {
 	RequestId         string
 	TraceParentId     string

@@ -56,7 +56,7 @@ func main() {
 					ctx.Meta = map[string]interface{}{
 						"test": "aaa",
 					}
-					ctx.Call("math.minus", nil, nil)
+					ctx.Call("math.minus", nil)
 					return ctx.Params, nil
 				},
 			},

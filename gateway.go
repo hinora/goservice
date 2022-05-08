@@ -53,7 +53,7 @@ func (g *Gateway) genHandle(r *gin.RouterGroup, serviceName string, action Regis
 	g.Service.Broker.LogInfo("Generate gateway end point: `" + action.Rest.Method.String() + "` " + "/" + pathMapping)
 	handle := func(c *gin.Context) {
 		params := g.parseParam(c)
-		data, err := g.Service.Broker.Call(g.Service.Name, "`"+action.Rest.Method.String()+"` "+"/"+pathMapping, serviceName+"."+action.Name, params, nil)
+		data, err := g.Service.Broker.Call(g.Service.Name, "`"+action.Rest.Method.String()+"` "+"/"+pathMapping, serviceName+"."+action.Name, params, CallOpts{})
 		if err != nil {
 			c.JSON(500, err.Error())
 		} else {

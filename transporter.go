@@ -217,7 +217,11 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 			spanId := b.startTraceSpan("Action `"+serviceName+"."+action.Name+"`", "action", serviceName, action.Name, data.Params, ctx.FromNode, ctx.TraceParentId, ctx.CallingLevel, data.TraceRootParentId)
 
 			ctx.TraceParentId = spanId
-			ctx.Call = func(a string, params interface{}, meta interface{}) (interface{}, error) {
+			ctx.Call = func(a string, params interface{}, opts ...CallOpts) (interface{}, error) {
+				optsTemp := CallOpts{}
+				if len(opts) != 0 {
+					optsTemp = opts[0]
+				}
 				ctxCall := Context{
 					RequestId:         uuid.New().String(),
 					ResponseId:        uuid.New().String(),
@@ -231,7 +235,7 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 					TraceParentRootId: data.TraceRootParentId,
 				}
 
-				callResult, err := b.callActionOrEvent(ctxCall, a, params, meta, serviceName, action.Name, "")
+				callResult, err := b.callActionOrEvent(ctxCall, a, params, optsTemp, serviceName, action.Name, "")
 				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
@@ -311,7 +315,11 @@ func (b *Broker) listenEventCall(serviceName string, event Event) {
 			spanId := b.startTraceSpan("Event `"+event.Name+"`", "action", serviceName, event.Name, data.Params, ctx.FromNode, ctx.TraceParentId, ctx.CallingLevel, data.TraceRootParentId)
 
 			ctx.TraceParentId = spanId
-			ctx.Call = func(a string, params interface{}, meta interface{}) (interface{}, error) {
+			ctx.Call = func(a string, params interface{}, opts ...CallOpts) (interface{}, error) {
+				optsTemp := CallOpts{}
+				if len(opts) != 0 {
+					optsTemp = opts[0]
+				}
 				ctxCall := Context{
 					RequestId:         uuid.New().String(),
 					ResponseId:        uuid.New().String(),
@@ -325,7 +333,7 @@ func (b *Broker) listenEventCall(serviceName string, event Event) {
 					TraceParentRootId: data.TraceRootParentId,
 				}
 
-				callResult, err := b.callActionOrEvent(ctxCall, a, params, meta, serviceName, "", event.Name)
+				callResult, err := b.callActionOrEvent(ctxCall, a, params, optsTemp, serviceName, "", event.Name)
 				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
@@ -343,7 +351,7 @@ func (b *Broker) listenEventCall(serviceName string, event Event) {
 }
 
 // calling
-func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interface{}, meta interface{}, callerService string, callerAction string, callerEvent string) (ResponseTranferData, error) {
+func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interface{}, callOpts CallOpts, callerService string, callerAction string, callerEvent string) (ResponseTranferData, error) {
 	// chose node call
 	service, action, events := b.balancingRoundRobin(actionName)
 	if service.Name == "" && action.Name == "" && len(events) == 0 {
