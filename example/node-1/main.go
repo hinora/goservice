@@ -102,6 +102,8 @@ func main() {
 				WhileList: []string{
 					".*",
 				},
+				StaticPath:       "/",
+				StaticFolderRoot: "./public",
 			},
 		},
 	})

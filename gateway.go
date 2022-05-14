@@ -13,8 +13,10 @@ import (
 )
 
 type GatewayConfigRoute struct {
-	Path      string
-	WhileList []string
+	Path             string
+	WhileList        []string
+	StaticPath       string
+	StaticFolderRoot string
 }
 type GatewayConfig struct {
 	Name   string
@@ -43,13 +45,17 @@ func (g *Gateway) MapServices() {
 				}
 			}
 		}
+		if r.StaticPath != "" && r.StaticFolderRoot != "" {
+			g.Service.Broker.LogInfo("Generate route static folder: `" + r.Path + r.StaticPath + "`")
+			rG.Static(r.StaticPath, r.StaticFolderRoot)
+		}
 		g.GinRoutes = append(g.GinRoutes, rG)
 	}
 	g.Gin.Run(g.Config.Host + ":" + strconv.Itoa(g.Config.Port))
 }
 
 func (g *Gateway) genHandle(r *gin.RouterGroup, serviceName string, action RegistryAction) {
-	pathMapping := serviceName + "/" + action.Rest.Path
+	pathMapping := serviceName + action.Rest.Path
 	g.Service.Broker.LogInfo("Generate gateway end point: `" + action.Rest.Method.String() + "` " + "/" + pathMapping)
 	handle := func(c *gin.Context) {
 		params := g.parseParam(c)
