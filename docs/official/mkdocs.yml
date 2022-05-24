@@ -1,11 +1,26 @@
 site_name: Go Service
 nav:
   - Home: index.md
+  - Document:
+    - Introduction: introduction.md
+    - Core Concepts: core-concepts.md
+    - Broker: broker.md
+    - Configuration: configuration.md
+    - Services: services.md
+    - Actions: actions.md
+    - Event: event.md
+    - Context: context.md
+    - Transporters: transporters.md
+    - Discovery Registry: discovery-registry.md
+    - Logging: logging.md
+    - Tracing: tracing.md
+    - API Gateway: api-gateway.md
 theme:
   name: material
   features:
     - navigation.sections
     - navigation.tabs
+  logo: assets/logo.png
 extra:
   generator: false
 
