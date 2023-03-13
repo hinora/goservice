@@ -1,7 +1,7 @@
 package main
 
 import (
-	"sync"
+	"time"
 
 	"github.com/hinora/goservice"
 )
@@ -10,6 +10,7 @@ func main() {
 	b := goservice.Init(goservice.BrokerConfig{
 		NodeId: "Node-2",
 		DiscoveryConfig: goservice.DiscoveryConfig{
+			Enable:        true,
 			DiscoveryType: goservice.DiscoveryTypeRedis,
 			Config: goservice.DiscoveryRedisConfig{
 				Port: 6379,
@@ -20,6 +21,7 @@ func main() {
 			CleanOfflineNodesTimeout: 9000,
 		},
 		TransporterConfig: goservice.TransporterConfig{
+			Enable:          true,
 			TransporterType: goservice.TransporterTypeRedis,
 			Config: goservice.TransporterRedisConfig{
 				Port: 6379,
@@ -31,33 +33,36 @@ func main() {
 			Enabled:      true,
 			TraceExpoter: goservice.TraceExporterConsole,
 		},
+		LoggerConfig: goservice.Logconfig{
+			Enable:   true,
+			Type:     goservice.LogConsole,
+			LogLevel: goservice.LogTypeInfo,
+		},
 	})
-
 	b.LoadService(&goservice.Service{
-		Name: "hello",
+		Name: "test",
 		Actions: []goservice.Action{
 			{
-				Name:   "say_hi",
+				Name:   "test",
 				Params: map[string]interface{}{},
-				Rest: goservice.Rest{
-					Method: goservice.GET,
-					Path:   "/say_hi",
-				},
 				Handle: func(ctx *goservice.Context) (interface{}, error) {
-					ctx.LogInfo("Handle action say hi from node 2")
-					var wg sync.WaitGroup
-					totalCall := 2
-					for i := 0; i < totalCall; i++ {
-						wg.Add(1)
+					// ctx.LogWarning("Handle action plus")
+					time.Sleep(time.Second * 1)
+					ctx.Meta = map[string]interface{}{
+						"test": "aaa",
 					}
-					for j := 0; j < totalCall; j++ {
-						go func() {
-							defer wg.Done()
-						}()
-					}
-					wg.Wait()
-					ctx.Call("event.test", nil, nil)
-					return "This is result from action say hi", nil
+					ctx.Call("test.test2", nil)
+					return ctx.Params, nil
+				},
+			},
+			{
+				Name:   "test2",
+				Params: map[string]interface{}{},
+				Handle: func(ctx *goservice.Context) (interface{}, error) {
+					// ctx.LogWarning("Handle action minus")
+					// fmt.Println("meta incoming: ", ctx.Meta)
+					time.Sleep(time.Second * 1)
+					return "asdasd", nil
 				},
 			},
 		},
@@ -65,10 +70,21 @@ func main() {
 			{
 				Name: "event.test",
 				Handle: func(ctx *goservice.Context) {
-					ctx.LogInfo("Handle event test from node 2")
+					ctx.LogInfo("Handle event test from node 1")
 				},
 			},
 		},
+		// Started: func(ctx *goservice.Context) {
+		// 	time.Sleep(time.Millisecond * 5000)
+		// 	fmt.Println("service test started")
+
+		// 	fmt.Println(ctx.Call("event.test", nil, nil))
+		// 	data, err := ctx.Call("hello.say_hi", nil, nil)
+		// 	fmt.Println("Response from say hi: ", data, err)
+		// 	// data2, err2 := ctx.Call("hello.say_hi", nil, nil)
+		// 	// fmt.Println("Response from say hi: ", data2, err2)
+		// },
 	})
+
 	b.Hold()
 }

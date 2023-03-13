@@ -18,6 +18,7 @@ func main() {
 			HeartbeatInterval:        3000,
 			HeartbeatTimeout:         7000,
 			CleanOfflineNodesTimeout: 9000,
+			Enable:                   true,
 		},
 		TransporterConfig: goservice.TransporterConfig{
 			TransporterType: goservice.TransporterTypeRedis,

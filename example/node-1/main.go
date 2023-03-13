@@ -1,8 +1,7 @@
 package main
 
 import (
-	"errors"
-	"fmt"
+	"time"
 
 	"github.com/hinora/goservice"
 )
@@ -11,7 +10,7 @@ func main() {
 	b := goservice.Init(goservice.BrokerConfig{
 		NodeId: "Node-1",
 		DiscoveryConfig: goservice.DiscoveryConfig{
-			Enable:        false,
+			Enable:        true,
 			DiscoveryType: goservice.DiscoveryTypeRedis,
 			Config: goservice.DiscoveryRedisConfig{
 				Port: 6379,
@@ -22,7 +21,7 @@ func main() {
 			CleanOfflineNodesTimeout: 9000,
 		},
 		TransporterConfig: goservice.TransporterConfig{
-			Enable:          false,
+			Enable:          true,
 			TransporterType: goservice.TransporterTypeRedis,
 			Config: goservice.TransporterRedisConfig{
 				Port: 6379,
@@ -51,7 +50,7 @@ func main() {
 					Path:   "/plus",
 				},
 				Handle: func(ctx *goservice.Context) (interface{}, error) {
-					ctx.LogWarning("Handle action plus")
+					// ctx.LogWarning("Handle action plus")
 					// time.Sleep(time.Second * 1)
 					ctx.Meta = map[string]interface{}{
 						"test": "aaa",
@@ -64,10 +63,11 @@ func main() {
 				Name:   "minus",
 				Params: map[string]interface{}{},
 				Handle: func(ctx *goservice.Context) (interface{}, error) {
-					ctx.LogWarning("Handle action minus")
-					fmt.Println("meta incoming: ", ctx.Meta)
-					// time.Sleep(time.Second * 1)
-					return "This is result from action math.minus", errors.New("Test")
+					// ctx.LogWarning("Handle action minus")
+					// fmt.Println("meta incoming: ", ctx.Meta)
+					time.Sleep(time.Second * 1)
+					ctx.Call("test.test", nil)
+					return "This is result from action math.minus", nil
 				},
 			},
 		},
